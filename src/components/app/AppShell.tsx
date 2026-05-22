@@ -21,7 +21,7 @@ import {
   ChevronDown,
   Layers
 } from "lucide-react";
-import { useStore, Role } from "@/lib/store";
+import { useStore, Role, Notification } from "@/lib/store";
 import { getEffectiveRole, isAdminRole, roleDisplayName } from "@/lib/roles";
 import { useTheme } from "@/app/providers";
 import { Button } from "@/components/ui/button";
@@ -43,7 +43,7 @@ export function AppShell() {
   const navigate = useNavigate();
   
   const [mobileOpen, setMobileOpen] = React.useState(false);
-  const unreadNotifications = userNotifications.filter((n) => !n.read).length;
+  const unreadNotifications = userNotifications.filter((n: Notification) => !n.read).length;
   const effectiveRole = getEffectiveRole(currentUser);
 
   const currentPath = location.pathname;

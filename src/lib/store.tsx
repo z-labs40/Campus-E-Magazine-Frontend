@@ -14,6 +14,7 @@ export interface User {
   department?: string;
   activeSuggestionsCount?: number;
   publishedCount?: number;
+  password?: string;
 }
 
 export type ArticleStatus =
@@ -213,8 +214,12 @@ interface StoreContextValue {
   logout: () => void;
   register: (name: string, email: string, role: AccountRole) => User | null;
   createAdmin: (name: string, email: string, department: string, asCoAdmin?: boolean) => User | null;
+  updateAvatar: (avatarUrl: string) => void;
   updateProfile: (name: string, bio: string, department: string) => void;
+  changePassword: (currentPass: string, newPass: string) => { success: boolean; error?: string };
+  // New: retrieve notifications for currently logged-in user
   getNotificationsForCurrentUser: () => Notification[];
+
 
   // Article Operations
   createArticle: (title: string, subtitle: string, category: string, coverImage: string, content: string) => Article;
@@ -289,7 +294,8 @@ const INITIAL_USERS: User[] = [
     avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=150",
     bio: "Head of Journalism & Media studies. Oversees all publication guidelines.",
     department: "Journalism & Media",
-    publishedCount: 12
+    publishedCount: 12,
+    password: "password123"
   },
   {
     id: "u-2",
@@ -299,7 +305,8 @@ const INITIAL_USERS: User[] = [
     avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150",
     bio: "Senior Editor. Passionate about narrative pacing, technical writing, and structural consistency.",
     department: "English Literature",
-    publishedCount: 8
+    publishedCount: 8,
+    password: "password123"
   },
   {
     id: "u-3",
@@ -310,7 +317,8 @@ const INITIAL_USERS: User[] = [
     bio: "Computer Science major, tech journalist, and core campus editorial writer.",
     department: "Computer Science",
     publishedCount: 5,
-    activeSuggestionsCount: 2
+    activeSuggestionsCount: 2,
+    password: "password123"
   },
   {
     id: "u-4",
@@ -321,7 +329,8 @@ const INITIAL_USERS: User[] = [
     bio: "Environmental Studies junior. Focused on ecological stories and campus climate changes.",
     department: "Environmental Sciences",
     publishedCount: 3,
-    activeSuggestionsCount: 1
+    activeSuggestionsCount: 1,
+    password: "password123"
   }
 ];
 
@@ -707,6 +716,27 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const updated = { ...currentUser, name, bio, department };
     setCurrentUser(updated);
     setUsers((s) => s.map((x) => x.id === currentUser.id ? updated : x));
+  };
+
+  const updateAvatar = (avatarUrl: string) => {
+    if (!currentUser) return;
+    const updated = { ...currentUser, avatar: avatarUrl };
+    setCurrentUser(updated);
+    setUsers((s) => s.map((x) => x.id === currentUser.id ? updated : x));
+  };
+  const changePassword = (currentPass: string, newPass: string): { success: boolean; error?: string } => {
+    if (!currentUser) return { success: false, error: "No user logged in." };
+    const storedUser = users.find(u => u.id === currentUser.id);
+    const actualPassword = storedUser?.password || "password123";
+    
+    if (currentPass !== actualPassword) {
+      return { success: false, error: "Current password does not match." };
+    }
+    
+    const updated = { ...currentUser, password: newPass };
+    setCurrentUser(updated);
+    setUsers((s) => s.map((x) => x.id === currentUser.id ? updated : x));
+    return { success: true };
   };
 
   const createArticle = (title: string, subtitle: string, category: string, coverImage: string, content: string): Article => {
@@ -1296,6 +1326,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     register,
     createAdmin,
     updateProfile,
+    updateAvatar,
+    changePassword,
     getNotificationsForCurrentUser,
     createArticle,
     updateArticle,

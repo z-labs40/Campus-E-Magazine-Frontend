@@ -1,5 +1,7 @@
-import EditorDashboard from "@/components/dashboard/EditorDashboard";
+import * as React from "react";
+import { Navigate } from "react-router-dom";
 
 export default function Page() {
-  return <EditorDashboard />;
+  return <Navigate to="/app" replace />;
 }
+

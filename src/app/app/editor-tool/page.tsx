@@ -1,5 +1,5 @@
-import RichTextEditor from "@/components/dashboard/RichTextEditor";
+import EditorRouter from "@/components/dashboard/EditorRouter";
 
 export default function Page() {
-  return <RichTextEditor />;
+  return <EditorRouter />;
 }

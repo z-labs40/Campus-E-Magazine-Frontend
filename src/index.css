@@ -269,4 +269,30 @@
       display: none;
     }
   }
+
+  /* Core Typographical Classes for Editorial Layouts */
+  .font-times { font-family: "Times New Roman", Times, serif; }
+  .font-sans-serif { font-family: sans-serif; }
+  .font-monospaced { font-family: monospace; }
+  .font-serif-fallback { font-family: serif; }
+  .font-poppins { font-family: "Poppins", sans-serif; }
+  .font-roboto { font-family: "Roboto", sans-serif; }
+  .font-montserrat { font-family: "Montserrat", sans-serif; }
+  .font-playfair { font-family: "Playfair Display", serif; }
+  .font-lora { font-family: "Lora", serif; }
+  .font-opensans { font-family: "Open Sans", sans-serif; }
+  .font-merriweather { font-family: "Merriweather", serif; }
+
+  /* Map standard execCommand font face elements to Google Fonts */
+  font[face="Times New Roman"] { font-family: "Times New Roman", Times, serif !important; }
+  font[face="sans-serif"] { font-family: sans-serif !important; }
+  font[face="monospace"] { font-family: monospace !important; }
+  font[face="serif"] { font-family: serif !important; }
+  font[face="Poppins"] { font-family: "Poppins", sans-serif !important; }
+  font[face="Roboto"] { font-family: "Roboto", sans-serif !important; }
+  font[face="Montserrat"] { font-family: "Montserrat", sans-serif !important; }
+  font[face="Playfair Display"] { font-family: "Playfair Display", serif !important; }
+  font[face="Lora"] { font-family: "Lora", serif !important; }
+  font[face="Open Sans"] { font-family: "Open Sans", sans-serif !important; }
+  font[face="Merriweather"] { font-family: "Merriweather", serif !important; }
 }

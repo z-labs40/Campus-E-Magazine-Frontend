@@ -14,7 +14,7 @@ export default function RegisterPage() {
   const [name, setName] = React.useState("");
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
-  const [role, setRole] = React.useState<Role>("writer");
+  const [role, setRole] = React.useState<Role>("user");
   const [loading, setLoading] = React.useState(false);
 
   const handleRegister = (e: React.FormEvent) => {
@@ -30,7 +30,7 @@ export default function RegisterPage() {
 
     setLoading(true);
     setTimeout(() => {
-      const user = register(name, email, role);
+      const user = register(name, email, "user");
       setLoading(false);
       
       if (user) {
@@ -127,30 +127,10 @@ export default function RegisterPage() {
 
             <div className="space-y-1.5">
               <span className="text-xs font-semibold text-muted-foreground">Select Workspace Role</span>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setRole("writer")}
-                  className={`h-9 rounded-lg border text-xs font-bold capitalize select-none cursor-pointer ${
-                    role === "writer"
-                      ? "bg-primary border-primary text-primary-foreground font-extrabold shadow-sm"
-                      : "border-border bg-background text-muted-foreground hover:bg-accent hover:text-foreground"
-                  }`}
-                >
-                  Writer Profile
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setRole("editor")}
-                  className={`h-9 rounded-lg border text-xs font-bold capitalize select-none cursor-pointer ${
-                    role === "editor"
-                      ? "bg-primary border-primary text-primary-foreground font-extrabold shadow-sm"
-                      : "border-border bg-background text-muted-foreground hover:bg-accent hover:text-foreground"
-                  }`}
-                >
-                  Editor Profile
-                </button>
-              </div>
+              <p className="text-xs text-muted-foreground rounded-lg border border-border/50 bg-accent/20 p-3">
+                New accounts start as <strong>Editors</strong> — you can create magazines and submit changes for admin approval.
+                Admins are provisioned only from the admin panel.
+              </p>
             </div>
 
             <Button type="submit" className="w-full rounded-xl gap-2 font-semibold h-11 shadow-premium pt-1 animate-pulse-slow" disabled={loading}>

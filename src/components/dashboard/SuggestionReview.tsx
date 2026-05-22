@@ -25,7 +25,8 @@ export default function SuggestionReview() {
     articles, 
     suggestions, 
     resolveSuggestion,
-    currentUser
+    currentUser,
+    collaboratorEdits
   } = useStore();
 
   // If no specific article ID is provided, look for the first article with pending suggestions
@@ -34,6 +35,7 @@ export default function SuggestionReview() {
 
   const article = articles.find(a => a.id === targetArticleId);
   const articleSuggestions = suggestions.filter(s => s.articleId === targetArticleId && s.status === "pending");
+  const articleCollaboratorEdits = collaboratorEdits.filter(e => e.articleId === targetArticleId);
 
   const handleResolve = (sugId: string, status: SuggestionStatus) => {
     resolveSuggestion(sugId, status, `Moderated by ${currentUser?.name || "Marcus Thorne"}`);
@@ -161,6 +163,73 @@ export default function SuggestionReview() {
                       </Button>
                     </div>
 
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          {/* ARTICLE COLLABORATIVE EDIT HISTORY */}
+          <Card className="p-6 relative select-none">
+            <div className="border-b border-border/50 pb-4 mb-6 flex items-center justify-between">
+              <div className="flex flex-col">
+                <span className="text-[10px] font-extrabold uppercase text-muted-foreground">Collaborator Activities</span>
+                <span className="font-sora font-extrabold text-base text-foreground">Edit History & Revisions</span>
+              </div>
+              <Badge variant="outline" className="text-[10px] font-bold">
+                {articleCollaboratorEdits.length} Revisions
+              </Badge>
+            </div>
+
+            {articleCollaboratorEdits.length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-6">
+                No collaborator revisions recorded for this magazine issue yet.
+              </p>
+            ) : (
+              <div className="space-y-4">
+                {articleCollaboratorEdits.map((edit) => (
+                  <div key={edit.id} className="p-4 rounded-xl border border-border/60 bg-accent/5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex items-start gap-3 text-left">
+                      <img src={edit.collaboratorAvatar} className="h-8 w-8 rounded-full border border-border/40 object-cover mt-0.5" />
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-foreground">{edit.collaboratorName}</span>
+                          <span className="text-[9px] text-muted-foreground">• {edit.timestamp}</span>
+                        </div>
+                        <p className="text-xs font-semibold text-muted-foreground">
+                          "{edit.changeSummary}"
+                        </p>
+                        {edit.feedback && (
+                          <p className="text-[10px] text-destructive font-semibold">
+                            Feedback: {edit.feedback}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3 shrink-0 self-start md:self-auto select-none">
+                      <Badge 
+                        variant={
+                          edit.status === "merged" ? "success" : 
+                          edit.status === "rejected" ? "danger" : 
+                          edit.status === "pending_admin_review" ? "warning" : "default"
+                        }
+                        className="capitalize text-[9px] font-bold"
+                      >
+                        {edit.status === "pending_admin_review" ? "Pending Admin Approval" : edit.status}
+                      </Badge>
+
+                      {(edit.status === "pending_admin_review" || edit.status === "draft") && (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="h-7 px-2.5 rounded-lg text-[10px] font-extrabold gap-1 border-primary/20 text-primary hover:bg-primary/5 cursor-pointer"
+                          onClick={() => navigate(`/app/editor-tool/${edit.articleId}?reviewEditId=${edit.id}`)}
+                        >
+                          <span>Inspect Draft</span>
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

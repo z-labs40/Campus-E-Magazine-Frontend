@@ -17,10 +17,12 @@ import {
   Menu, 
   X,
   FileCheck,
+  CheckSquare,
   ChevronDown,
   Layers
 } from "lucide-react";
 import { useStore, Role } from "@/lib/store";
+import { getEffectiveRole, isAdminRole, roleDisplayName } from "@/lib/roles";
 import { useTheme } from "@/app/providers";
 import { Button } from "@/components/ui/button";
 import { 
@@ -34,55 +36,63 @@ import {
 import { Badge } from "@/components/ui/badge";
 
 export function AppShell() {
-  const { currentUser, login, logout, notifications } = useStore();
+  const { currentUser, login, logout, getNotificationsForCurrentUser, pendingSubmissions } = useStore();
+  const userNotifications = getNotificationsForCurrentUser();
   const { theme, toggleTheme } = useTheme();
   const location = useLocation();
   const navigate = useNavigate();
   
   const [mobileOpen, setMobileOpen] = React.useState(false);
-  const unreadNotifications = notifications.filter(n => !n.read).length;
+  const unreadNotifications = userNotifications.filter((n) => !n.read).length;
+  const effectiveRole = getEffectiveRole(currentUser);
 
   const currentPath = location.pathname;
 
+  type NavItem = { name: string; path: string; icon: any; role: Role[]; badgeCount?: number };
+  
   // Sidebar navigation links grouped logically
-  const navigationItems = [
+  const navigationItems: { title: string; items: NavItem[] }[] = [
     {
       title: "Workspace",
       items: [
-        { name: "Writer Dashboard", path: "/app", icon: PenTool, role: ["writer", "editor", "admin"] as Role[] },
-        { name: "Editor Dashboard", path: "/app/editor", icon: FileCheck, role: ["editor", "admin"] as Role[] },
-        { name: "Admin Dashboard", path: "/app/admin", icon: Settings, role: ["admin"] as Role[] },
+        { name: "Editor Dashboard", path: "/app", icon: PenTool, role: ["user"] },
+        { name: "Admin Dashboard", path: "/app/admin", icon: Settings, role: ["admin", "co-admin"] },
+      ]
+    },
+    {
+      title: "Admin Workflow",
+      items: [
+        { name: "Pending Reviews", path: "/app/admin/pending", icon: CheckSquare, role: ["admin", "co-admin"], badgeCount: pendingSubmissions.length || undefined },
+        { name: "Collaborator Revisions", path: "/app/admin/collaborator", icon: FileCheck, role: ["admin", "co-admin"] },
+        { name: "Create Co-Admin", path: "/app/admin/create", icon: User, role: ["admin", "co-admin"] },
       ]
     },
     {
       title: "Tools & Collaboration",
       items: [
-        { name: "Rich Editor", path: "/app/editor-tool", icon: Layers, role: ["writer", "editor", "admin"] as Role[] },
-        { name: "Suggestions Queue", path: "/app/suggestion-review", icon: BookOpen, role: ["writer", "editor", "admin"] as Role[] },
-        { name: "Notifications", path: "/app/notifications", icon: Bell, badgeCount: unreadNotifications, role: ["writer", "editor", "admin"] as Role[] },
+        { name: "Magazine Hub", path: "/app/magazines", icon: Layers, role: ["user", "admin", "co-admin"] },
+        { name: "Suggestions Queue", path: "/app/suggestion-review", icon: BookOpen, role: ["user"] },
+        { name: "Notifications", path: "/app/notifications", icon: Bell, badgeCount: unreadNotifications || undefined, role: ["user", "admin", "co-admin"] },
       ]
     },
     {
       title: "Personal",
       items: [
-        { name: "My Profile", path: "/app/profile", icon: User, role: ["writer", "editor", "admin"] as Role[] },
+        { name: "My Profile", path: "/app/profile", icon: User, role: ["user", "admin", "co-admin"] },
       ]
     }
   ];
 
   // Auto switch dashboard depending on role to preview cleanly
   const handleRoleChange = (role: Role) => {
-    const defaultEmails: Record<Role, string> = {
+    const defaultEmails: Record<string, string> = {
       admin: "evelyn.vance@campus.edu",
-      editor: "marcus.t@campus.edu",
-      writer: "aria.chen@campus.edu",
-      reader: "guest@campus.edu"
+      "co-admin": "marcus.t@campus.edu",
+      user: "aria.chen@campus.edu",
     };
-    login(defaultEmails[role], role);
+    login(defaultEmails[role] || defaultEmails.user, role);
     
-    // Redirect to correct landing dashboard
-    if (role === "admin") navigate("/app/admin");
-    else if (role === "editor") navigate("/app/editor");
+    if (isAdminRole(role)) navigate("/app/admin");
     else navigate("/app");
   };
 
@@ -91,10 +101,10 @@ export function AppShell() {
   }, [location.pathname]);
 
   const activeUser = currentUser || {
-    name: "Guest Reader",
+    name: "Guest Writer",
     email: "guest@campus.edu",
-    role: "reader" as Role,
-    avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150"
+    role: "user" as Role,
+    avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150",
   };
 
   const isLinkActive = (path: string) => {
@@ -105,12 +115,12 @@ export function AppShell() {
   };
 
   const renderNavSection = (section: typeof navigationItems[0]) => {
-    const visibleItems = section.items.filter(item => item.role.includes(activeUser.role));
+    const visibleItems = section.items.filter((item) => item.role.includes(activeUser.role));
     if (visibleItems.length === 0) return null;
 
     return (
       <div key={section.title} className="mb-6">
-        <h4 className="px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground/60 mb-2">
+        <h4 className="px-3 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/50 mb-2">
           {section.title}
         </h4>
         <div className="space-y-1">
@@ -124,11 +134,11 @@ export function AppShell() {
                 className={`relative flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all group select-none ${
                   active 
                     ? "bg-primary text-primary-foreground shadow-sm font-semibold" 
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                    : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-white"
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <Icon className={`h-4.5 w-4.5 transition-transform group-hover:scale-105 ${active ? "text-primary-foreground" : "text-muted-foreground/80 group-hover:text-foreground"}`} />
+                  <Icon className={`h-4.5 w-4.5 transition-transform group-hover:scale-105 ${active ? "text-primary-foreground" : "text-sidebar-foreground/60 group-hover:text-white"}`} />
                   <span>{item.name}</span>
                 </div>
                 {item.badgeCount ? (
@@ -155,7 +165,7 @@ export function AppShell() {
           <BookOpen className="h-6 w-6 text-primary" />
           <div className="flex flex-col">
             <span className="font-sora font-bold tracking-tight text-lg text-white">Campus E-Mag</span>
-            <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">COLLABORATIVE PUBLISHER</span>
+            <span className="text-[10px] text-sidebar-foreground/50 font-medium uppercase tracking-wider">COLLABORATIVE PUBLISHER</span>
           </div>
         </div>
 
@@ -163,16 +173,16 @@ export function AppShell() {
         <nav className="flex-1 p-4 overflow-y-auto scrollbar-none">
           {navigationItems.map(renderNavSection)}
           
-          <div className="mt-8 border-t border-sidebar-border pt-4">
-            <Link to="/magazine" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-sidebar-accent hover:text-white transition-all">
-              <Compass className="h-4.5 w-4.5" />
+          {/* <div className="mt-8 border-t border-sidebar-border pt-4">
+            <Link to="/magazine" className="group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-white transition-all">
+              <Compass className="h-4.5 w-4.5 text-sidebar-foreground/60 group-hover:text-white transition-transform group-hover:scale-105" />
               <span>Public Magazine</span>
             </Link>
-            <Link to="/discover" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-sidebar-accent hover:text-white transition-all">
-              <Archive className="h-4.5 w-4.5" />
+            <Link to="/discover" className="group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-white transition-all">
+              <Archive className="h-4.5 w-4.5 text-sidebar-foreground/60 group-hover:text-white transition-transform group-hover:scale-105" />
               <span>Discover & Archive</span>
             </Link>
-          </div>
+          </div> */}
         </nav>
 
         {/* Desktop Sidebar Footer */}
@@ -180,16 +190,15 @@ export function AppShell() {
           
           {/* Quick Switch Role Selector */}
           <div className="flex flex-col gap-1">
-            <span className="text-[10px] text-muted-foreground/75 font-semibold uppercase tracking-wider px-1">Testing Role Controller</span>
+            <span className="text-[10px] text-sidebar-foreground/50 font-semibold uppercase tracking-wider px-1">Testing Role Controller</span>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="glass" className="w-full justify-between h-9 px-3 border-sidebar-border text-white hover:bg-sidebar-accent">
                   <span className="capitalize font-semibold text-xs flex items-center gap-1.5">
                     <span className={`h-2 w-2 rounded-full ${
-                      activeUser.role === 'admin' ? 'bg-rose-400' :
-                      activeUser.role === 'editor' ? 'bg-amber-400' : 'bg-emerald-400'
+                      isAdminRole(activeUser.role) ? 'bg-rose-400' : 'bg-emerald-400'
                     }`} />
-                    {activeUser.role} Preview
+                    {roleDisplayName(effectiveRole)} Preview
                   </span>
                   <ChevronDown className="h-3.5 w-3.5 opacity-50" />
                 </Button>
@@ -197,16 +206,10 @@ export function AppShell() {
               <DropdownMenuContent className="w-56" align="end">
                 <DropdownMenuLabel>Switch User View</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => handleRoleChange("writer")}>
+                <DropdownMenuItem onClick={() => handleRoleChange("user")}>
                   <div className="flex flex-col text-left">
-                    <span className="font-semibold text-xs">Aria Chen (Writer)</span>
+                    <span className="font-semibold text-xs">Aria Chen (User)</span>
                     <span className="text-[10px] text-muted-foreground">Submit drafts, suggest text edits</span>
-                  </div>
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleRoleChange("editor")}>
-                  <div className="flex flex-col text-left">
-                    <span className="font-semibold text-xs">Marcus Thorne (Editor)</span>
-                    <span className="text-[10px] text-muted-foreground">Approve edits, moderate comments</span>
                   </div>
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => handleRoleChange("admin")}>
@@ -224,11 +227,11 @@ export function AppShell() {
               <img src={activeUser.avatar} className="h-8.5 w-8.5 rounded-full object-cover border border-sidebar-border" alt="User avatar" />
               <div className="flex flex-col max-w-[120px] overflow-hidden">
                 <span className="font-medium text-xs text-white truncate">{activeUser.name}</span>
-                <span className="text-[10px] text-muted-foreground truncate">{activeUser.email}</span>
+                <span className="text-[10px] text-sidebar-foreground/60 truncate">{activeUser.email}</span>
               </div>
             </div>
             
-            <Button variant="ghost" size="icon" onClick={() => { logout(); navigate("/login"); }} className="h-8 w-8 hover:bg-sidebar-accent text-muted-foreground hover:text-white rounded-lg">
+            <Button variant="ghost" size="icon" onClick={() => { logout(); navigate("/login"); }} className="h-8 w-8 hover:bg-sidebar-accent text-sidebar-foreground/60 hover:text-white rounded-lg">
               <LogOut className="h-4 w-4" />
             </Button>
           </div>
@@ -266,12 +269,12 @@ export function AppShell() {
               <nav className="flex-1 p-4 overflow-y-auto">
                 {navigationItems.map(renderNavSection)}
                 <div className="mt-8 border-t border-sidebar-border pt-4">
-                  <Link to="/magazine" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-sidebar-accent hover:text-white transition-all">
-                    <Compass className="h-4.5 w-4.5" />
+                  <Link to="/magazine" className="group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-white transition-all">
+                    <Compass className="h-4.5 w-4.5 text-sidebar-foreground/60 group-hover:text-white transition-transform group-hover:scale-105" />
                     <span>Public Magazine</span>
                   </Link>
-                  <Link to="/discover" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-sidebar-accent hover:text-white transition-all">
-                    <Archive className="h-4.5 w-4.5" />
+                  <Link to="/discover" className="group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-white transition-all">
+                    <Archive className="h-4.5 w-4.5 text-sidebar-foreground/60 group-hover:text-white transition-transform group-hover:scale-105" />
                     <span>Discover & Archive</span>
                   </Link>
                 </div>
@@ -288,8 +291,7 @@ export function AppShell() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent className="w-56" align="center">
-                    <DropdownMenuItem onClick={() => handleRoleChange("writer")}>Aria (Writer)</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleRoleChange("editor")}>Marcus (Editor)</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleRoleChange("user")}>Aria (User)</DropdownMenuItem>
                     <DropdownMenuItem onClick={() => handleRoleChange("admin")}>Evelyn (Admin)</DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -299,10 +301,10 @@ export function AppShell() {
                     <img src={activeUser.avatar} className="h-8 w-8 rounded-full object-cover border border-sidebar-border" alt="" />
                     <div className="flex flex-col text-left">
                       <span className="font-semibold text-xs text-white">{activeUser.name}</span>
-                      <span className="text-[10px] text-muted-foreground">{activeUser.role} view</span>
+                      <span className="text-[10px] text-sidebar-foreground/60">{activeUser.role} view</span>
                     </div>
                   </div>
-                  <Button variant="ghost" size="icon" onClick={() => { logout(); navigate("/login"); }} className="hover:bg-sidebar-accent text-white">
+                  <Button variant="ghost" size="icon" onClick={() => { logout(); navigate("/login"); }} className="hover:bg-sidebar-accent text-sidebar-foreground/60 hover:text-white">
                     <LogOut className="h-4 w-4" />
                   </Button>
                 </div>
@@ -316,24 +318,24 @@ export function AppShell() {
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         
         {/* Top Header */}
-        <header className="h-16 border-b border-border bg-background px-4 lg:px-8 flex items-center justify-between shrink-0 glass-panel sticky top-0 z-30">
+        <header className="h-16 border-b border-sidebar-border bg-sidebar px-4 lg:px-8 flex items-center justify-between shrink-0 sticky top-0 z-30 text-sidebar-foreground">
           
           <div className="flex items-center gap-4">
             {/* Mobile Sidebar Trigger */}
-            <Button variant="ghost" size="icon" className="lg:hidden h-10 w-10 text-muted-foreground hover:text-foreground" onClick={() => setMobileOpen(true)}>
+            <Button variant="ghost" size="icon" className="lg:hidden h-10 w-10 text-sidebar-foreground/70 hover:text-white hover:bg-sidebar-accent" onClick={() => setMobileOpen(true)}>
               <Menu className="h-5 w-5" />
             </Button>
             <div className="flex flex-col">
-              <span className="text-[10px] uppercase font-bold tracking-widest text-primary/80">CMS Platform Workspace</span>
-              <h2 className="font-sora font-semibold text-sm capitalize text-foreground select-none">
-                {activeUser.role} Dashboard / {location.pathname.split("/").pop() || "home"}
+              <span className="text-[10px] uppercase font-bold tracking-widest text-primary/90">CMS Platform Workspace</span>
+              <h2 className="font-sora font-semibold text-sm capitalize text-white select-none">
+                {roleDisplayName(effectiveRole)} / {location.pathname.split("/").pop() || "home"}
               </h2>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
             {/* Notification Alert Trigger */}
-            <Button variant="ghost" size="icon" onClick={() => navigate("/app/notifications")} className="relative h-9 w-9 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg">
+            <Button variant="ghost" size="icon" onClick={() => navigate("/app/notifications")} className="relative h-9 w-9 text-sidebar-foreground/70 hover:text-white hover:bg-sidebar-accent rounded-lg">
               <Bell className="h-4.5 w-4.5" />
               {unreadNotifications > 0 ? (
                 <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-primary animate-pulse" />
@@ -341,19 +343,19 @@ export function AppShell() {
             </Button>
 
             {/* Dark mode toggler */}
-            <Button variant="ghost" size="icon" onClick={toggleTheme} className="h-9 w-9 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-transform active:rotate-45">
+            <Button variant="ghost" size="icon" onClick={toggleTheme} className="h-9 w-9 text-sidebar-foreground/70 hover:text-white hover:bg-sidebar-accent rounded-lg transition-transform active:rotate-45">
               {theme === "dark" ? <Sun className="h-4.5 w-4.5" /> : <Moon className="h-4.5 w-4.5" />}
             </Button>
 
             {/* Public Magazine Shortcut */}
-            <Button variant="outline" className="hidden sm:flex h-9 rounded-lg gap-2 text-xs font-semibold shadow-premium" onClick={() => navigate("/magazine")}>
+            <Button variant="outline" className="hidden sm:flex h-9 rounded-lg gap-2 text-xs font-semibold border-sidebar-border bg-sidebar-accent/30 text-white hover:bg-sidebar-accent shadow-premium" onClick={() => navigate("/magazine")}>
               <BookOpen className="h-3.5 w-3.5" />
               <span>Read Magazine</span>
             </Button>
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full ring-2 ring-primary/10 hover:ring-primary/20">
+                <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full ring-2 ring-primary/30 hover:ring-primary/60">
                   <img src={activeUser.avatar} className="h-full w-full rounded-full object-cover" alt="" />
                 </Button>
               </DropdownMenuTrigger>

@@ -17,11 +17,16 @@ import ArchivePageWrapper from "./archive/page";
 import WriterDashboardWrapper from "./app/page";
 import EditorDashboardWrapper from "./app/editor/page";
 import AdminDashboardWrapper from "./app/admin/page";
-import RichTextEditorPageWrapper from "./app/editor-tool/page";
+import EditorRouterWrapper from "./app/editor-tool/page";
+import MagazineHubWrapper from "./app/magazines/page";
 import SuggestionReviewPageWrapper from "./app/suggestion-review/page";
 import NotificationsPageWrapper from "./app/notifications/page";
 import ProfilePageWrapper from "./app/profile/page";
 import VersionHistoryPageWrapper from "./app/version-history/page";
+import AdminCreateAdminWrapper from "./app/admin/create/page";
+import AdminPendingReviewsWrapper from "./app/admin/pending/page";
+import AdminCollaboratorReviewsWrapper from "./app/admin/collaborator/page";
+import AdminArticleReviewWrapper from "./app/admin/review/page";
 
 import { AppShell } from "@/components/app/AppShell";
 import NotFoundPage from "@/components/Common/NotFoundPage";
@@ -48,8 +53,14 @@ export default function AppLayout() {
             <Route index element={<WriterDashboardWrapper />} />
             <Route path="editor" element={<EditorDashboardWrapper />} />
             <Route path="admin" element={<AdminDashboardWrapper />} />
-            <Route path="editor-tool" element={<RichTextEditorPageWrapper />} />
-            <Route path="editor-tool/:id" element={<RichTextEditorPageWrapper />} />
+            <Route path="admin/create" element={<AdminCreateAdminWrapper />} />
+            <Route path="admin/pending" element={<AdminPendingReviewsWrapper />} />
+            <Route path="admin/review/:id" element={<AdminArticleReviewWrapper />} />
+            <Route path="admin/collaborator" element={<AdminCollaboratorReviewsWrapper />} />
+            <Route path="magazines" element={<MagazineHubWrapper />} />
+            <Route path="editor-tool" element={<EditorRouterWrapper />} />
+            <Route path="editor-tool/new" element={<EditorRouterWrapper />} />
+            <Route path="editor-tool/:id" element={<EditorRouterWrapper />} />
             <Route path="suggestion-review" element={<SuggestionReviewPageWrapper />} />
             <Route path="suggestion-review/:id" element={<SuggestionReviewPageWrapper />} />
             <Route path="notifications" element={<NotificationsPageWrapper />} />

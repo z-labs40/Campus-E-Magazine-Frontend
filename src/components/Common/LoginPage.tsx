@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { BookOpen, ShieldAlert, ArrowRight, CheckCircle, Sparkles } from "lucide-react";
 import { useStore, Role } from "@/lib/store";
 import { Button } from "@/components/ui/button";
@@ -11,10 +11,12 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const { login } = useStore();
   const { toast } = useToast();
+  const [searchParams] = useSearchParams();
+  const redirectTo = searchParams.get("redirect");
 
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
-  const [role, setRole] = React.useState<Role>("writer");
+  const [role, setRole] = React.useState<Role>("user");
   const [loading, setLoading] = React.useState(false);
 
   const handleLogin = (e: React.FormEvent) => {
@@ -40,10 +42,14 @@ export default function LoginPage() {
           variant: "success"
         });
 
-        // Smart redirect depending on logged in role
-        if (user.role === "admin") navigate("/app/admin");
-        else if (user.role === "editor") navigate("/app/editor");
-        else navigate("/app");
+        // Smart redirect depending on search param or role
+        if (redirectTo) {
+          navigate(redirectTo);
+        } else if (user.role === "admin" || user.role === "co-admin") {
+          navigate("/app/admin");
+        } else {
+          navigate("/app");
+        }
       }
     }, 800);
   };
@@ -60,9 +66,13 @@ export default function LoginPage() {
           description: `Access granted as ${user.name} (${user.role.toUpperCase()})`,
           variant: "success"
         });
-        if (user.role === "admin") navigate("/app/admin");
-        else if (user.role === "editor") navigate("/app/editor");
-        else navigate("/app");
+        if (redirectTo) {
+          navigate(redirectTo);
+        } else if (user.role === "admin" || user.role === "co-admin") {
+          navigate("/app/admin");
+        } else {
+          navigate("/app");
+        }
       }
     }, 400);
   };
@@ -153,8 +163,8 @@ export default function LoginPage() {
 
             <div className="space-y-1.5">
               <span className="text-xs font-semibold text-muted-foreground">Select Active Workspace Role</span>
-              <div className="grid grid-cols-3 gap-2">
-                {(["writer", "editor", "admin"] as Role[]).map((r) => (
+              <div className="grid grid-cols-2 gap-2">
+                {(["user", "admin"] as Role[]).map((r) => (
                   <button
                     key={r}
                     type="button"
@@ -165,7 +175,7 @@ export default function LoginPage() {
                         : "border-border bg-background text-muted-foreground hover:bg-accent hover:text-foreground"
                     }`}
                   >
-                    {r}
+                    {r === "user" ? "Student User" : "Administrator"}
                   </button>
                 ))}
               </div>
@@ -193,21 +203,11 @@ export default function LoginPage() {
                 variant="outline" 
                 size="sm" 
                 className="w-full text-[11px] justify-between h-9 rounded-lg hover:border-emerald-500/30 hover:bg-emerald-500/5 select-none"
-                onClick={() => handleQuickLogin("aria.chen@campus.edu", "writer")}
+                onClick={() => handleQuickLogin("aria.chen@campus.edu", "user")}
                 type="button"
               >
-                <span>Aria Chen (Writer View)</span>
-                <span className="text-[9px] text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded-full font-bold">Writer</span>
-              </Button>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                className="w-full text-[11px] justify-between h-9 rounded-lg hover:border-amber-500/30 hover:bg-amber-500/5 select-none"
-                onClick={() => handleQuickLogin("marcus.t@campus.edu", "editor")}
-                type="button"
-              >
-                <span>Marcus Thorne (Editor View)</span>
-                <span className="text-[9px] text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded-full font-bold">Editor</span>
+                <span>Aria Chen (User View)</span>
+                <span className="text-[9px] text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded-full font-bold">User</span>
               </Button>
               <Button 
                 variant="outline" 

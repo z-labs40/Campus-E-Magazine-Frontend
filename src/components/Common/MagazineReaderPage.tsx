@@ -12,7 +12,11 @@ import {
   Calendar,
   Clock,
   ExternalLink,
-  ChevronRight
+  ChevronRight,
+  Bold,
+  Italic,
+  Underline,
+  ChevronDown
 } from "lucide-react";
 import { useStore, EditSuggestion } from "@/lib/store";
 import { Button } from "@/components/ui/button";
@@ -32,9 +36,16 @@ export default function MagazineReaderPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { articles, comments, addComment, addSuggestion, updateArticle, currentUser } = useStore();
+  const { articles, comments, addComment, addSuggestion, updateArticle, currentUser, recordArticleView, getPublicArticleContent } = useStore();
 
   const article = articles.find(a => a.id === id) || articles[0];
+  const publicContent = article ? getPublicArticleContent(article) : null;
+
+  React.useEffect(() => {
+    if (id && article?.status === "published") {
+      recordArticleView(id);
+    }
+  }, [id, article?.status, recordArticleView]);
   const articleComments = comments.filter(c => c.targetId === article?.id);
 
   // States
@@ -49,12 +60,27 @@ export default function MagazineReaderPage() {
   const [suggestionComment, setSuggestionComment] = React.useState("");
   const [suggestionCategory, setSuggestionCategory] = React.useState<EditSuggestion["category"]>("content");
 
+  // Floating selection toolbar state
+  const [floatToolbar, setFloatToolbar] = React.useState<{ x: number; y: number; text: string } | null>(null);
+  const floatRef = React.useRef<HTMLDivElement>(null);
+
   // Keep likes synced with article if article loads dynamically
   React.useEffect(() => {
     if (article) {
       setLikes(article.likes);
     }
   }, [article]);
+
+  // Hide floating toolbar when clicking outside it
+  React.useEffect(() => {
+    const onMouseDown = (e: MouseEvent) => {
+      if (floatRef.current && !floatRef.current.contains(e.target as Node)) {
+        setFloatToolbar(null);
+      }
+    };
+    document.addEventListener("mousedown", onMouseDown);
+    return () => document.removeEventListener("mousedown", onMouseDown);
+  }, []);
 
   if (!article) {
     return (
@@ -107,19 +133,37 @@ export default function MagazineReaderPage() {
     });
   };
 
-  // Double click helper to capture highlighted text and trigger the Suggest Edit popup
+  // Text selection handler — shows floating toolbar anchored to selection rect
   const handleTextSelection = () => {
-    const selection = window.getSelection();
-    const text = selection ? selection.toString().trim() : "";
-    if (text.length > 3 && text.length < 300) {
-      setSelectedText(text);
-      setSuggestedText(text);
-      setSuggestionOpen(true);
-    }
+    // Short delay so the browser has committed the selection
+    setTimeout(() => {
+      const selection = window.getSelection();
+      const text = selection ? selection.toString().trim() : "";
+      if (text.length > 1 && selection!.rangeCount > 0) {
+        const range = selection!.getRangeAt(0);
+        const rect = range.getBoundingClientRect();
+        setFloatToolbar({
+          x: rect.left + rect.width / 2,
+          y: rect.top + window.scrollY,
+          text
+        });
+      } else {
+        setFloatToolbar(null);
+      }
+    }, 10);
   };
 
   // Alternate helper: Open suggestion modal directly for the user with highlighted sample paragraph
   const handleOpenQuickSuggestion = (sampleOriginal: string) => {
+    if (!currentUser) {
+      toast({
+        title: "Sign In to Suggest Edits",
+        description: "Please sign in to suggest edits and new content on this magazine.",
+        variant: "info"
+      });
+      navigate(`/login?redirect=${encodeURIComponent(`/app/editor-tool/${article.id}`)}`);
+      return;
+    }
     setSelectedText(sampleOriginal);
     setSuggestedText(sampleOriginal);
     setSuggestionOpen(true);
@@ -161,25 +205,166 @@ export default function MagazineReaderPage() {
   const getParagraphs = (htmlContent: string) => {
     const parser = new DOMParser();
     const doc = parser.parseFromString(htmlContent, "text/html");
-    const elements = Array.from(doc.body.children);
-    return elements.map((el, index) => {
+    
+    let targetNode: Element = doc.body;
+    let containerStyleAttr = "";
+    let containerClassAttr = "";
+
+    const container = doc.querySelector(".magazine-article-container");
+    if (container) {
+      targetNode = container;
+      containerStyleAttr = container.getAttribute("style") || "";
+      containerClassAttr = container.getAttribute("class") || "";
+    }
+
+    const elements = Array.from(targetNode.children);
+    
+    // Helper to convert inline CSS style strings into React style objects
+    const parseStyles = (str: string) => {
+      const styles: Record<string, string> = {};
+      str.split(";").forEach(pair => {
+        const [key, value] = pair.split(":");
+        if (key && value) {
+          const camelKey = key.trim().replace(/-./g, x => x[1].toUpperCase());
+          styles[camelKey] = value.trim();
+        }
+      });
+      return styles;
+    };
+
+    const renderedElements = elements.map((el, index) => {
       const text = el.textContent || "";
       const isHeader = el.tagName.startsWith("H");
       const isQuote = el.tagName === "BLOCKQUOTE";
+      const isImg = el.tagName === "DIV" && el.classList.contains("magazine-image-wrap");
+      const isGrid = el.tagName === "DIV" && el.classList.contains("magazine-grid");
+      const isDivider = el.tagName === "HR";
+
+      const styleAttr = el.getAttribute("style") || "";
+      // Fix: split only on the FIRST colon so values like rgb(0,0,0) or url(...) are preserved
+      const parseStyles = (str: string) => {
+        const styles: Record<string, string> = {};
+        str.split(";").forEach(pair => {
+          const colonIdx = pair.indexOf(":");
+          if (colonIdx === -1) return;
+          const key = pair.slice(0, colonIdx).trim();
+          const value = pair.slice(colonIdx + 1).trim();
+          if (key && value) {
+            const camelKey = key.replace(/-./g, x => x[1].toUpperCase());
+            styles[camelKey] = value;
+          }
+        });
+        return styles;
+      };
+      const elementStyles = parseStyles(styleAttr);
+
+      // Shared hover "Suggest Edit" button rendered on all text content
+      const hoverBtn = (
+        <button
+          onClick={() => {
+            if (!currentUser) {
+              toast({
+                title: "Sign In to Suggest Edits",
+                description: "Please sign in to suggest edits and new content on this magazine.",
+                variant: "info"
+              });
+              navigate(`/login?redirect=${encodeURIComponent(`/app/editor-tool/${article.id}`)}`);
+              return;
+            }
+            handleOpenQuickSuggestion(text);
+          }}
+          className="absolute right-0 top-1/2 -translate-y-1/2 opacity-0 group-hover/para:opacity-100 transition-opacity bg-accent border border-border shadow-premium rounded-lg px-2.5 py-1 text-[11px] font-bold text-muted-foreground hover:text-primary hover:border-primary/30 flex items-center gap-1 cursor-pointer select-none z-10"
+          type="button"
+        >
+          <PenTool className="h-3 w-3" />
+          <span>{currentUser ? "Suggest Edit" : "Sign In to Edit"}</span>
+        </button>
+      );
 
       if (isHeader) {
         return (
-          <h2 key={index} className="font-sora font-extrabold text-2xl text-foreground mt-8 mb-4">
-            {text}
-          </h2>
+          <div key={index} className="relative group/para mb-2">
+            <h2 
+              onMouseUp={handleTextSelection}
+              style={elementStyles} 
+              className="font-sora font-extrabold text-2xl text-foreground mt-8 mb-4 cursor-text selection:bg-primary/20"
+              dangerouslySetInnerHTML={{ __html: el.innerHTML }}
+            />
+            {hoverBtn}
+          </div>
         );
       }
 
       if (isQuote) {
         return (
-          <blockquote key={index} className="pl-6 border-l-4 border-primary italic font-serif text-lg text-muted-foreground my-6">
-            "{text}"
-          </blockquote>
+          <div key={index} className="relative group/para my-6">
+            <blockquote 
+              onMouseUp={handleTextSelection}
+              style={{ borderLeft: "4px solid var(--primary)", paddingLeft: "24px", fontStyle: "italic", margin: "24px 0", ...elementStyles }}
+              className="italic font-serif text-lg text-muted-foreground cursor-text selection:bg-primary/20"
+              dangerouslySetInnerHTML={{ __html: el.innerHTML }}
+            />
+            {hoverBtn}
+          </div>
+        );
+      }
+
+      if (isDivider) {
+        return (
+          <hr 
+            key={index}
+            style={{ border: "0", height: "1px", backgroundImage: "linear-gradient(to right, rgba(0,0,0,0), rgba(0,0,0,0.3), rgba(0,0,0,0))", margin: "32px 0", ...elementStyles }}
+          />
+        );
+      }
+
+      if (isImg) {
+        const img = el.querySelector("img");
+        const cap = el.querySelector(".caption");
+        const imgStyleAttr = img?.getAttribute("style") || "";
+        return (
+          <div 
+            key={index} 
+            style={{ display: "block", ...elementStyles }} 
+            className="rounded-xl overflow-hidden my-6 border border-border/50 bg-accent/10"
+          >
+            <img 
+              src={img?.getAttribute("src") || ""} 
+              alt="" 
+              style={{ width: "100%", height: "auto", display: "block", ...parseStyles(imgStyleAttr) }} 
+            />
+            {cap && (
+              <div 
+                className="p-2.5 text-center text-xs text-muted-foreground bg-background/50 border-t border-border"
+                dangerouslySetInnerHTML={{ __html: cap.innerHTML }}
+              />
+            )}
+          </div>
+        );
+      }
+
+      if (isGrid) {
+        return (
+          <div 
+            key={index} 
+            style={{ display: "flex", flexWrap: "wrap", gap: "24px", margin: "24px 0", ...elementStyles }}
+            className="magazine-grid"
+          >
+            {Array.from(el.children).map((col, colIdx) => (
+              <div 
+                key={colIdx} 
+                className="relative group/para magazine-column" 
+                style={{ flex: 1, minWidth: "200px", padding: "4px" }}
+              >
+                <div 
+                  onMouseUp={handleTextSelection}
+                  className="cursor-text selection:bg-primary/20"
+                  dangerouslySetInnerHTML={{ __html: col.innerHTML }} 
+                />
+                {hoverBtn}
+              </div>
+            ))}
+          </div>
         );
       }
 
@@ -187,28 +372,87 @@ export default function MagazineReaderPage() {
         <div key={index} className="relative group/para mb-6">
           <p 
             onMouseUp={handleTextSelection}
+            style={elementStyles}
             className="font-serif text-base sm:text-lg leading-relaxed text-foreground/90 selection:bg-primary/20 cursor-text"
-          >
-            {text}
-          </p>
-          
-          {/* Subtle Hover button to suggest edit on this exact paragraph */}
-          <button
-            onClick={() => handleOpenQuickSuggestion(text)}
-            className="absolute right-0 top-1/2 -translate-y-1/2 opacity-0 group-hover/para:opacity-100 transition-opacity bg-accent border border-border shadow-premium rounded-lg px-2.5 py-1 text-[11px] font-bold text-muted-foreground hover:text-primary hover:border-primary/30 flex items-center gap-1 cursor-pointer select-none"
-            type="button"
-          >
-            <PenTool className="h-3 w-3" />
-            <span>Suggest Edit</span>
-          </button>
+            dangerouslySetInnerHTML={{ __html: el.innerHTML }}
+          />
+          {hoverBtn}
         </div>
       );
     });
+
+    if (container) {
+      const containerStyles = parseStyles(containerStyleAttr);
+      return (
+        <div 
+          className={`magazine-article-container ${containerClassAttr}`} 
+          style={{ borderRadius: "16px", border: "1px solid rgba(0,0,0,0.06)", minHeight: "500px", boxShadow: "var(--shadow-premium)", ...containerStyles }}
+        >
+          {renderedElements}
+        </div>
+      );
+    }
+
+    return renderedElements;
   };
 
   return (
     <div className="min-h-screen bg-background flex flex-col font-sans">
       
+      {/* FLOATING TEXT SELECTION TOOLBAR */}
+      {floatToolbar && (
+        <div 
+          ref={floatRef}
+          style={{
+            position: "absolute",
+            top: floatToolbar.y - 48,
+            left: floatToolbar.x,
+            transform: "translateX(-50%)",
+            zIndex: 100
+          }}
+          className="flex items-center gap-1 p-1 bg-gray-950 text-white rounded-lg shadow-xl animate-in fade-in zoom-in-95 duration-100 select-none border border-gray-800"
+        >
+          {/* Mock formatting buttons for aesthetics */}
+          <button className="p-1.5 hover:bg-gray-800 rounded text-gray-300 hover:text-white transition-colors" title="Bold"><Bold className="h-4 w-4" /></button>
+          <button className="p-1.5 hover:bg-gray-800 rounded text-gray-300 hover:text-white transition-colors" title="Italic"><Italic className="h-4 w-4" /></button>
+          <button className="p-1.5 hover:bg-gray-800 rounded text-gray-300 hover:text-white transition-colors" title="Underline"><Underline className="h-4 w-4" /></button>
+          
+          <div className="w-px h-5 bg-gray-700 mx-1"></div>
+          
+          <button className="px-2 py-1.5 hover:bg-gray-800 rounded text-gray-300 hover:text-white transition-colors flex items-center gap-1 text-xs font-semibold">
+            Font Style <ChevronDown className="h-3 w-3" />
+          </button>
+          <button className="px-2 py-1.5 hover:bg-gray-800 rounded text-gray-300 hover:text-white transition-colors flex items-center gap-1 text-xs font-semibold">
+            Size <ChevronDown className="h-3 w-3" />
+          </button>
+
+          <div className="w-px h-5 bg-gray-700 mx-1"></div>
+
+          {/* Color swatch mocks */}
+          <div className="flex items-center gap-1 px-1">
+            <div className="h-4 w-4 rounded-full bg-white border border-gray-600 cursor-pointer hover:scale-110 transition-transform"></div>
+            <div className="h-4 w-4 rounded-full bg-gray-600 cursor-pointer hover:scale-110 transition-transform"></div>
+            <div className="h-4 w-4 rounded-full bg-blue-500 cursor-pointer hover:scale-110 transition-transform"></div>
+            <div className="h-4 w-4 rounded-full bg-emerald-500 cursor-pointer hover:scale-110 transition-transform"></div>
+            <div className="h-4 w-4 rounded-full bg-purple-500 cursor-pointer hover:scale-110 transition-transform"></div>
+            <div className="h-4 w-4 rounded-full bg-rose-500 cursor-pointer hover:scale-110 transition-transform"></div>
+          </div>
+
+          <div className="w-px h-5 bg-gray-700 mx-1"></div>
+
+          {/* Actual Suggest Edit Action */}
+          <Button 
+            size="sm" 
+            variant="ghost" 
+            onClick={() => handleOpenQuickSuggestion(floatToolbar.text)}
+            className="h-7 px-2.5 bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground text-[11px] rounded flex items-center gap-1.5 font-bold"
+          >
+            <PenTool className="h-3 w-3" />
+            <span>{currentUser ? "Suggest Edit" : "Sign In to Edit"}</span>
+          </Button>
+        </div>
+      )}
+
       {/* 1. PUBLIC HEADER */}
       <header className="h-20 px-6 lg:px-16 border-b border-border/40 flex items-center justify-between bg-background sticky top-0 z-40">
         <Link to="/" className="flex items-center gap-3 select-none">
@@ -227,7 +471,7 @@ export default function MagazineReaderPage() {
       {/* 2. COVER SHEET HERO */}
       <section className="relative h-[320px] lg:h-[460px] overflow-hidden select-none">
         <img 
-          src={article.coverImage} 
+          src={publicContent?.coverImage || article.coverImage} 
           className="h-full w-full object-cover" 
           alt="Article cover banner" 
         />
@@ -245,11 +489,11 @@ export default function MagazineReaderPage() {
           </div>
 
           <h1 className="font-sora font-extrabold text-3xl sm:text-5xl text-foreground leading-[1.1] tracking-tight">
-            {article.title}
+            {publicContent?.title || article.title}
           </h1>
 
           <p className="text-muted-foreground text-sm sm:text-lg leading-relaxed">
-            {article.subtitle}
+            {publicContent?.subtitle || article.subtitle}
           </p>
 
           <div className="pt-6 border-t border-border/60 flex flex-wrap items-center justify-between gap-4 select-none">
@@ -270,25 +514,50 @@ export default function MagazineReaderPage() {
                 <Clock className="h-3.5 w-3.5" />
                 <span>{article.readTime}</span>
               </div>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="gap-2 rounded-xl text-xs font-bold border-primary/30 text-primary hover:bg-primary/5 select-none ml-2"
+                onClick={() => {
+                  if (currentUser) {
+                    toast({
+                      title: "Opening Suggest Edit Workspace",
+                      description: "Loading this article into the collaborative editor. You can edit existing content or add new blocks.",
+                      variant: "success"
+                    });
+                    navigate(`/app/editor-tool/${article.id}`);
+                  } else {
+                    toast({
+                      title: "Sign In to Suggest Edits",
+                      description: "Create a free account or sign in to suggest edits and new content on this magazine.",
+                      variant: "info"
+                    });
+                    navigate(`/login?redirect=${encodeURIComponent(`/app/editor-tool/${article.id}`)}`);
+                  }
+                }}
+              >
+                <PenTool className="h-3.5 w-3.5" />
+                <span>Suggest Edit</span>
+              </Button>
             </div>
           </div>
         </div>
 
-        {/* INSTRUCTIONS TIP BAR FOR EDIT HIGHLIGHT */}
+        {/* INSTRUCTIONS TIP BAR FOR SUGGEST EDIT HIGHLIGHT */}
         <div className="my-8 rounded-xl border border-primary/20 bg-primary/5 p-4 flex items-center justify-between text-left select-none">
           <div className="flex items-center gap-3">
             <Sparkles className="h-5 w-5 text-primary animate-pulse" />
             <div className="flex flex-col">
-              <span className="text-xs font-extrabold text-foreground">Interactive Collaborate Mode</span>
-              <span className="text-[10px] text-muted-foreground">Highlight any text block with your mouse OR hover over paragraphs to suggest immediate edits!</span>
+              <span className="text-xs font-extrabold text-foreground">Suggest Edits & New Content</span>
+              <span className="text-[10px] text-muted-foreground">Click <strong>Suggest Edit</strong> to sign in and open this magazine in the collaborative editor — modify existing content or add brand new blocks. All suggestions go to Admin for review.</span>
             </div>
           </div>
-          <Badge variant="purple" className="hidden sm:inline-flex text-[9px] uppercase font-bold tracking-widest">Double-click text</Badge>
+          <Badge variant="purple" className="hidden sm:inline-flex text-[9px] uppercase font-bold tracking-widest">Login to Edit</Badge>
         </div>
 
         {/* SERIF TYPOGRAPHY BODY */}
         <div className="prose max-w-none text-left mt-8">
-          {getParagraphs(article.content)}
+          {getParagraphs(publicContent?.content || article.content)}
         </div>
 
         {/* 4. READER INTERACTIONS BLOCK */}

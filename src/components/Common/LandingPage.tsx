@@ -18,9 +18,26 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { useStore } from "@/lib/store";
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogDescription 
+} from "@/components/ui/modal";
 
 export default function LandingPage() {
   const navigate = useNavigate();
+  const { articles, currentUser, users } = useStore();
+  const [showGateModal, setShowGateModal] = React.useState(false);
+
+  const publishedMagazines = articles
+    .filter(a => a.status === "published")
+    .sort((a, b) => b.likes - a.likes);
+
+  const isLoggedIn = !!currentUser;
+  const visibleMagazines = isLoggedIn ? publishedMagazines : publishedMagazines.slice(0, 6);
 
   // Simulated live typing and cursors
   const [typedText, setTypedText] = React.useState("Artificial Intelligence is reshaping how ");
@@ -255,7 +272,7 @@ export default function LandingPage() {
         <div className="max-w-6xl mx-auto space-y-12">
           
           <div className="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4">
-            <div className="space-y-2">
+            <div className="space-y-2 text-left">
               <span className="text-[10px] text-primary uppercase font-bold tracking-widest">Active Publications</span>
               <h2 className="font-sora font-extrabold text-3xl sm:text-4xl text-foreground">Featured Campus Articles</h2>
             </div>
@@ -266,61 +283,57 @@ export default function LandingPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            
-            {/* Card Preview 1 */}
-            <div className="group rounded-2xl overflow-hidden border border-border bg-card shadow-premium hover:shadow-hover transition-all duration-300 flex flex-col sm:flex-row cursor-pointer" onClick={() => navigate("/magazine/art-1")}>
-              <div className="relative sm:w-2/5 h-48 sm:h-auto overflow-hidden">
-                <img 
-                  src="https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&q=80&w=400" 
-                  className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" 
-                  alt="" 
-                />
-                <Badge className="absolute top-3 left-3" variant="purple">Technology</Badge>
-              </div>
-              <div className="p-6 flex-1 flex flex-col justify-between">
-                <div className="space-y-2">
-                  <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">May 14, 2026 • 7 min read</span>
-                  <h3 className="font-sora font-bold text-lg text-foreground group-hover:text-primary transition-colors leading-snug">
-                    The Silent Shift: How AI is Redefining Classroom Dynamics
-                  </h3>
-                  <p className="text-muted-foreground text-xs line-clamp-2 leading-relaxed">
-                    Beyond the cheating scare, algorithms are quietly restructuring how college students learn, think, and collaborate.
-                  </p>
+            {visibleMagazines.map((art) => (
+              <div 
+                key={art.id} 
+                className="group rounded-2xl overflow-hidden border border-border bg-card shadow-premium hover:shadow-hover transition-all duration-300 flex flex-col sm:flex-row cursor-pointer text-left" 
+                onClick={() => navigate(`/magazine/${art.id}`)}
+              >
+                <div className="relative sm:w-2/5 h-48 sm:h-auto overflow-hidden select-none shrink-0 border-r border-border/10">
+                  <img 
+                    src={art.coverImage} 
+                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" 
+                    alt="" 
+                  />
+                  <Badge className="absolute top-3 left-3" variant="purple">{art.category}</Badge>
                 </div>
-                <div className="flex items-center gap-2 pt-4 select-none">
-                  <img src="https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=80" className="h-6 w-6 rounded-full object-cover" alt="" />
-                  <span className="text-[11px] font-bold">Aria Chen</span>
+                <div className="p-6 flex-1 flex flex-col justify-between">
+                  <div className="space-y-2">
+                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">
+                      {art.createdAt} • {art.likes} 👍 likes
+                    </span>
+                    <h3 className="font-sora font-bold text-lg text-foreground group-hover:text-primary transition-colors leading-snug">
+                      {art.title}
+                    </h3>
+                    <p className="text-muted-foreground text-xs line-clamp-2 leading-relaxed">
+                      {art.subtitle}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 pt-4 select-none">
+                    <img src={art.authorAvatar} className="h-6 w-6 rounded-full object-cover border border-border" alt="" />
+                    <span className="text-[11px] font-bold">{art.authorName}</span>
+                  </div>
                 </div>
               </div>
-            </div>
+            ))}
 
-            {/* Card Preview 2 */}
-            <div className="group rounded-2xl overflow-hidden border border-border bg-card shadow-premium hover:shadow-hover transition-all duration-300 flex flex-col sm:flex-row cursor-pointer" onClick={() => navigate("/magazine/art-2")}>
-              <div className="relative sm:w-2/5 h-48 sm:h-auto overflow-hidden">
-                <img 
-                  src="https://images.unsplash.com/photo-1530745342582-0795f23ec976?auto=format&fit=crop&q=80&w=400" 
-                  className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" 
-                  alt="" 
-                />
-                <Badge className="absolute top-3 left-3" variant="purple">Environment</Badge>
-              </div>
-              <div className="p-6 flex-1 flex flex-col justify-between">
-                <div className="space-y-2">
-                  <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">May 10, 2026 • 5 min read</span>
-                  <h3 className="font-sora font-bold text-lg text-foreground group-hover:text-primary transition-colors leading-snug">
-                    Urban Green: Reimagining Our Campus Concrete Spaces
-                  </h3>
-                  <p className="text-muted-foreground text-xs line-clamp-2 leading-relaxed">
-                    A collaborative proposal to turn passive pathways into micro-ecological zones for study and biodiversity.
+            {/* Gating Lock Panel */}
+            {!isLoggedIn && publishedMagazines.length > 6 && (
+              <div className="col-span-1 md:col-span-2 p-8 rounded-2xl border border-primary/20 bg-primary/5 text-center space-y-4 shadow-premium relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-r from-primary/5 to-purple-500/5 pointer-events-none" />
+                <div className="max-w-md mx-auto space-y-2 relative z-10">
+                  <Sparkles className="h-8 w-8 text-primary mx-auto animate-pulse" />
+                  <h3 className="font-sora font-extrabold text-xl text-foreground">Unlock Complete Campus Archives</h3>
+                  <p className="text-muted-foreground text-xs leading-relaxed">
+                    You are viewing our featured highlights. Join {users.length * 14 + 120}+ campus readers to read more than {publishedMagazines.length} active issues, leave comments, and contribute edits!
                   </p>
-                </div>
-                <div className="flex items-center gap-2 pt-4 select-none">
-                  <img src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=80" className="h-6 w-6 rounded-full object-cover" alt="" />
-                  <span className="text-[11px] font-bold">Devon Reed</span>
+                  <div className="pt-2 flex justify-center gap-3">
+                    <Button size="sm" onClick={() => navigate("/register")} className="rounded-xl shadow-premium">Register Account</Button>
+                    <Button size="sm" variant="outline" onClick={() => setShowGateModal(true)} className="rounded-xl">Sign In</Button>
+                  </div>
                 </div>
               </div>
-            </div>
-
+            )}
           </div>
         </div>
       </section>
@@ -360,6 +373,30 @@ export default function LandingPage() {
           </p>
         </div>
       </footer>
+
+      {/* 8. AUTHENTICATION SHIELD GATE MODAL */}
+      <Dialog open={showGateModal} onOpenChange={setShowGateModal}>
+        <DialogContent className="max-w-sm p-6 bg-card border-border shadow-premium rounded-2xl glass-card">
+          <DialogHeader className="text-left space-y-2 select-none">
+            <DialogTitle className="flex items-center gap-2 text-primary">
+              <BookOpen className="h-5 w-5 text-primary" />
+              <span>Members-Only Archive Vault</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              To browse all e-magazine issues beyond the first 6 articles, please join the campus network.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 mt-2 select-none">
+            <Button className="w-full rounded-xl font-semibold h-11" onClick={() => { setShowGateModal(false); navigate("/register"); }}>
+              Create a Free Account
+            </Button>
+            <Button variant="outline" className="w-full rounded-xl font-semibold h-11" onClick={() => { setShowGateModal(false); navigate("/login"); }}>
+              Sign In with Campus Profile
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
     </div>
   );

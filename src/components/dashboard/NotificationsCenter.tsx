@@ -10,7 +10,8 @@ import { useToast } from "@/hooks/use-toast";
 export default function NotificationsCenter() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { notifications, markNotificationAsRead, markAllNotificationsRead } = useStore();
+  const { getNotificationsForCurrentUser, markNotificationAsRead, markAllNotificationsRead } = useStore();
+  const notifications = getNotificationsForCurrentUser();
 
   const handleMarkRead = (id: string) => {
     markNotificationAsRead(id);

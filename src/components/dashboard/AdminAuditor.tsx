@@ -43,6 +43,7 @@ import {
   DialogTitle, 
   DialogDescription 
 } from "@/components/ui/modal";
+import { api } from "@/lib/api";
 
 // Define the structured block type
 interface EditorBlock {
@@ -67,36 +68,39 @@ export default function AdminAuditor() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [searchParams] = useSearchParams();
-  const reviewEditId = searchParams.get("reviewEditId");
 
-  const { 
-    articles, 
-    updateArticle, 
-    createArticle, 
-    currentUser, 
-    publishArticle, 
-    requestCorrections,
-    collaboratorEdits,
-    saveCollaboratorEdit,
-    mergeCollaboratorEdit,
-    rejectCollaboratorEdit
-  } = useStore();
+  const isReadOnly = false;
+  const reviewEditId: any = null;
+  const reviewEdit: any = null;
+  const isAuthor = true; 
+  const myDraftEdit: any = null;
+  const saveCollaboratorEdit = (...args: any[]) => {};
+  const mergeCollaboratorEdit = (...args: any[]) => {};
+  const rejectCollaboratorEdit = (...args: any[]) => {};
+  const publishArticle = (...args: any[]) => {};
+  const requestCorrections = (...args: any[]) => {};
 
-  const existingArt = articles.find(a => a.id === id);
-  
-  // Find reviewEdit if active
-  const reviewEdit = reviewEditId ? collaboratorEdits.find(e => e.id === reviewEditId) : null;
+  const [loading, setLoading] = React.useState(true);
+  const [existingArt, setExistingArt] = React.useState<any>(null);
 
-  // Find active collaborator draft if collaborator is editing
-  const isAuthor = !existingArt || existingArt.authorId === currentUser?.id;
-  const myDraftEdit = (!isAuthor && existingArt) 
-    ? collaboratorEdits.find(e => e.articleId === existingArt.id && e.collaboratorId === currentUser?.id && e.status === "draft")
-    : null;
-
-  // If a standard author/moderator wants to read-only
-  const isReadOnly =
-    !reviewEditId && isAdminRole(currentUser?.role) && existingArt && existingArt.authorId !== currentUser?.id;
+  React.useEffect(() => {
+    const fetchMagazine = async () => {
+      if (!id) {
+        setLoading(false);
+        return;
+      }
+      try {
+        setLoading(true);
+        const res = await api.get(`/magazines/${id}`);
+        setExistingArt(res.data.data);
+      } catch (err) {
+        console.error("Failed to fetch magazine:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchMagazine();
+  }, [id]);
 
   const [adminFeedback, setAdminFeedback] = React.useState("");
   const [showRejectDialog, setShowRejectDialog] = React.useState(false);
@@ -278,33 +282,13 @@ export default function AdminAuditor() {
 
   // Sync inputs on article load
   React.useEffect(() => {
-    if (reviewEdit) {
-      setTitle(reviewEdit.title);
-      setSubtitle(reviewEdit.subtitle);
-      setCategory(reviewEdit.category);
-      setCoverImage(reviewEdit.coverImage);
+    if (existingArt) {
+      setTitle(existingArt.title || "");
+      setSubtitle(existingArt.subtitle || "");
+      setCategory(existingArt.category || "Technology");
+      setCoverImage(existingArt.coverImage || "");
       
-      const parsed = deserializeHTML(reviewEdit.content);
-      setBlocks(parsed.blocks);
-      setTheme(parsed.theme);
-      setPadding(parsed.padding);
-    } else if (myDraftEdit) {
-      setTitle(myDraftEdit.title);
-      setSubtitle(myDraftEdit.subtitle);
-      setCategory(myDraftEdit.category);
-      setCoverImage(myDraftEdit.coverImage);
-      
-      const parsed = deserializeHTML(myDraftEdit.content);
-      setBlocks(parsed.blocks);
-      setTheme(parsed.theme);
-      setPadding(parsed.padding);
-    } else if (existingArt) {
-      setTitle(existingArt.title);
-      setSubtitle(existingArt.subtitle);
-      setCategory(existingArt.category);
-      setCoverImage(existingArt.coverImage);
-      
-      const parsed = deserializeHTML(existingArt.content);
+      const parsed = deserializeHTML(existingArt.content || "");
       setBlocks(parsed.blocks);
       setTheme(parsed.theme);
       setPadding(parsed.padding);
@@ -323,7 +307,7 @@ export default function AdminAuditor() {
       setTheme("cream");
       setPadding("standard");
     }
-  }, [id, existingArt, reviewEditId, reviewEdit, myDraftEdit]);
+  }, [id, existingArt]);
 
   // ==========================================
   // HTML SERIALIZATION
@@ -415,7 +399,7 @@ export default function AdminAuditor() {
     });
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!title.trim()) {
       toast({
         title: "Validation Failure",
@@ -427,28 +411,42 @@ export default function AdminAuditor() {
 
     const serializedHtml = serializeHTML(blocks, theme, padding);
 
-    if (existingArt) {
-      updateArticle(existingArt.id, {
-        title,
-        subtitle,
-        category,
-        coverImage,
-        content: serializedHtml
-      });
-      
+    try {
+      if (existingArt) {
+        await api.patch(`/magazines/${existingArt.id}`, {
+          title,
+          subtitle,
+          category,
+          coverImage,
+          content: serializedHtml
+        });
+        
+        toast({
+          title: "Workspace Saved ✅",
+          description: `Successfully stored and committed design of "${title}".`,
+          variant: "success"
+        });
+      } else {
+        const res = await api.post('/magazines', {
+          title,
+          subtitle,
+          category,
+          coverImage,
+          content: serializedHtml
+        });
+        toast({
+          title: "Workspace Launched 🚀",
+          description: `Successfully initialized "${title}" in database.`,
+          variant: "success"
+        });
+        navigate(`/app/editor-tool/${res.data.data.id}`);
+      }
+    } catch (err: any) {
       toast({
-        title: "Workspace Saved ✅",
-        description: `Successfully stored and committed design of "${title}".`,
-        variant: "success"
+        title: "Save Failed",
+        description: err.response?.data?.error || "An error occurred while saving.",
+        variant: "destructive"
       });
-    } else {
-      const fresh = createArticle(title, subtitle, category, coverImage, serializedHtml);
-      toast({
-        title: "Workspace Launched 🚀",
-        description: `Successfully initialized "${title}" in local database.`,
-        variant: "success"
-      });
-      navigate(`/app/editor-tool/${fresh.id}`);
     }
   };
 

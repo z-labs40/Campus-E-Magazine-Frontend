@@ -1,24 +1,61 @@
 import * as React from "react";
-import { useStore } from "@/lib/store";
-import { isAdminRole } from "@/lib/roles";
 import { useNavigate } from "react-router-dom";
+import { api } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Users, BookOpen, Eye, ThumbsUp, MessageSquare, TrendingUp } from "lucide-react";
+import { Users, BookOpen, Eye, ThumbsUp, MessageSquare, TrendingUp, Loader2 } from "lucide-react";
 
 export default function AdminDashboard() {
-  const { users, articles } = useStore();
   const navigate = useNavigate();
 
-  const totalUsers = users.length;
-  const totalAdmins = users.filter((u) => isAdminRole(u.role)).length;
-  const publishedArticles = articles.filter((a) => a.status === "published");
-  const pendingCount = articles.filter((a) => a.status === "pending_review").length;
-  const rejectedCount = articles.filter((a) => a.status === "rejected").length;
-  const draftCount = articles.filter((a) => a.status === "draft").length;
+  const [loading, setLoading] = React.useState(true);
+  const [stats, setStats] = React.useState({
+    totalUsers: 0,
+    totalAdmins: 0,
+    totalMagazines: 0,
+    pendingEditions: 0,
+    pendingSuggestions: 0,
+  });
+  const [publishedArticles, setPublishedArticles] = React.useState<any[]>([]);
+  const [coAdmins, setCoAdmins] = React.useState<any[]>([]);
+
+  React.useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        setLoading(true);
+        const [statsRes, magsRes, adminsRes] = await Promise.all([
+          api.get("/admin/stats"),
+          api.get("/magazines"),
+          api.get("/admin/co-admins"),
+        ]);
+        
+        setStats(statsRes.data.data || {});
+        setPublishedArticles(magsRes.data.data || []);
+        setCoAdmins(adminsRes.data.data || []);
+      } catch (err) {
+        console.error("Failed to fetch dashboard data:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchDashboardData();
+  }, []);
+
+  // Using defaults for missing stats in backend
+  const pendingCount = stats.pendingEditions || 0;
+  const rejectedCount = 0; // Not available in stats yet
+  const draftCount = 0; // Not available in stats yet
   
   const totalViews = publishedArticles.reduce((sum, a) => sum + (a.views || 0), 0);
   const totalLikes = publishedArticles.reduce((sum, a) => sum + (a.likes || 0), 0);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 pt-6">
@@ -37,7 +74,7 @@ export default function AdminDashboard() {
             <div className="h-12 w-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mb-4">
               <Users className="h-6 w-6" />
             </div>
-            <span className="text-3xl font-extrabold font-sora">{totalUsers}</span>
+            <span className="text-3xl font-extrabold font-sora">{stats.totalUsers}</span>
             <span className="text-xs text-muted-foreground uppercase tracking-widest font-bold mt-1">Total Users</span>
           </CardContent>
         </Card>
@@ -47,7 +84,7 @@ export default function AdminDashboard() {
             <div className="h-12 w-12 rounded-full bg-emerald-500/10 text-emerald-500 flex items-center justify-center mb-4">
               <TrendingUp className="h-6 w-6" />
             </div>
-            <span className="text-3xl font-extrabold font-sora">{totalAdmins}</span>
+            <span className="text-3xl font-extrabold font-sora">{stats.totalAdmins}</span>
             <span className="text-xs text-muted-foreground uppercase tracking-widest font-bold mt-1">Admins & Co-Admins</span>
           </CardContent>
         </Card>
@@ -128,7 +165,7 @@ export default function AdminDashboard() {
                       <td className="p-4 text-left">
                         <div className="flex flex-col">
                           <span className="font-bold text-foreground">{art.title}</span>
-                          <span className="text-[10px] text-muted-foreground mt-0.5">Author: {art.authorName}</span>
+                          <span className="text-[10px] text-muted-foreground mt-0.5">Author: {art.authorName || 'Unknown'}</span>
                         </div>
                       </td>
                       <td className="p-4 text-right select-none font-semibold">
@@ -140,13 +177,13 @@ export default function AdminDashboard() {
                       <td className="p-4 text-right select-none font-semibold text-muted-foreground">
                         <div className="flex items-center justify-end gap-1.5">
                           <ThumbsUp className="h-3.5 w-3.5" />
-                          <span>{art.likes.toLocaleString()}</span>
+                          <span>{(art.likes || 0).toLocaleString()}</span>
                         </div>
                       </td>
                       <td className="p-4 text-right select-none font-semibold text-muted-foreground">
                         <div className="flex items-center justify-end gap-1.5">
                           <MessageSquare className="h-3.5 w-3.5" />
-                          <span>{art.commentsCount.toLocaleString()}</span>
+                          <span>{(art.commentsCount || 0).toLocaleString()}</span>
                         </div>
                       </td>
                     </tr>
@@ -183,11 +220,13 @@ export default function AdminDashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/10 font-jakarta">
-                  {users.map((u) => (
+                  {coAdmins.map((u) => (
                     <tr key={u.id} className="hover:bg-accent/10 transition-colors">
                       <td className="p-4">
                         <div className="flex items-center gap-2.5">
-                          <img src={u.avatar} className="h-8 w-8 rounded-full object-cover border border-border" alt="" />
+                          <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
+                            {u.name?.charAt(0).toUpperCase()}
+                          </div>
                           <div className="flex flex-col">
                             <span className="font-bold text-foreground text-xs">{u.name}</span>
                           </div>
@@ -195,14 +234,21 @@ export default function AdminDashboard() {
                       </td>
                       <td className="p-4 text-right select-none">
                         <Badge 
-                          variant={isAdminRole(u.role) ? "danger" : "success"}
+                          variant="danger"
                           className="capitalize text-[10px] font-bold"
                         >
-                          {u.role === "co-admin" ? "Co-Admin" : u.role}
+                          Co-Admin
                         </Badge>
                       </td>
                     </tr>
                   ))}
+                  {coAdmins.length === 0 && (
+                    <tr>
+                      <td colSpan={2} className="text-center p-8 text-muted-foreground text-xs">
+                        No co-admins found.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </CardContent>

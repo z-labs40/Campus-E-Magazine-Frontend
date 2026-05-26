@@ -33,22 +33,30 @@ export default function EditorDashboard() {
   const pendingArticles = articles.filter(a => a.status === "pending_review");
   const activeSuggestions = suggestions.filter(s => s.status === "pending");
 
-  const handlePublish = (id: string, title: string) => {
-    publishArticle(id);
-    toast({
-      title: "Article Published 🎉",
-      description: `"${title}" has been launched live in the public magazine homepage!`,
-      variant: "success"
-    });
+  const handlePublish = async (id: string, title: string) => {
+    try {
+      await publishArticle(id);
+      toast({
+        title: "Article Published 🎉",
+        description: `"${title}" has been launched live in the public magazine homepage!`,
+        variant: "success"
+      });
+    } catch (err) {
+      toast({ title: "Error", description: "Failed to publish article", variant: "destructive" });
+    }
   };
 
-  const handleResolveSuggestion = (id: string, status: SuggestionStatus, commentTitle: string) => {
-    resolveSuggestion(id, status, `Moderated by senior editor ${currentUser?.name || "Marcus"}`);
-    toast({
-      title: status === "approved" ? "Suggestion Accepted ✅" : "Suggestion Declined ❌",
-      description: `Edit suggestion for "${commentTitle}" has been resolved.`,
-      variant: status === "approved" ? "success" : "destructive"
-    });
+  const handleResolveSuggestion = async (id: string, status: SuggestionStatus, commentTitle: string) => {
+    try {
+      await resolveSuggestion(id, status, `Moderated by senior editor ${currentUser?.name || "Marcus"}`);
+      toast({
+        title: status === "approved" ? "Suggestion Accepted ✅" : "Suggestion Declined ❌",
+        description: `Edit suggestion for "${commentTitle}" has been resolved.`,
+        variant: status === "approved" ? "success" : "destructive"
+      });
+    } catch (err) {
+      toast({ title: "Error", description: "Failed to resolve suggestion", variant: "destructive" });
+    }
   };
 
   return (

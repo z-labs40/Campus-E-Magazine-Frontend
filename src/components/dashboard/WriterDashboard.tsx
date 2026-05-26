@@ -36,21 +36,25 @@ export default function WriterDashboard() {
   const totalViews = myArticles.filter(a => a.status === "published").reduce((s, a) => s + a.views, 0);
   const totalLikes = myArticles.filter(a => a.status === "published").reduce((s, a) => s + a.likes, 0);
 
-  const handleCreateNew = () => {
-    // Initialize a beautiful blank template
-    const newArt = createArticle(
-      "Untitled Workspace Draft", 
-      "Click here to write an interesting subtitle...", 
-      "Technology", 
-      "https://images.unsplash.com/photo-1506784983877-45594efa4cbe?auto=format&fit=crop&q=80&w=1200",
-      "<p>Start typing your collegiate masterpiece here...</p>"
-    );
-    toast({
-      title: "Draft Created",
-      description: "A blank document was created. Redirecting to Rich Editor.",
-      variant: "success"
-    });
-    navigate(`/app/editor-tool/${newArt.id}`);
+  const handleCreateNew = async () => {
+    try {
+      // Initialize a beautiful blank template
+      const newArt = await createArticle(
+        "Untitled Workspace Draft", 
+        "Click here to write an interesting subtitle...", 
+        "Technology", 
+        "https://images.unsplash.com/photo-1506784983877-45594efa4cbe?auto=format&fit=crop&q=80&w=1200",
+        "<p>Start typing your collegiate masterpiece here...</p>"
+      );
+      toast({
+        title: "Draft Created",
+        description: "A blank document was created. Redirecting to Rich Editor.",
+        variant: "success"
+      });
+      navigate(`/app/editor-tool/${newArt.id}`);
+    } catch (err) {
+      toast({ title: "Error", description: "Failed to create draft.", variant: "destructive" });
+    }
   };
 
   const handleSubmitReview = (id: string, title: string) => {

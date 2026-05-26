@@ -1,5 +1,6 @@
 import * as React from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { api } from "@/lib/api";
 import { 
   BookOpen, 
   FileCheck2, 
@@ -9,9 +10,9 @@ import {
   Check, 
   X,
   Clock,
-  Layers
+  Layers,
+  Loader2
 } from "lucide-react";
-import { useStore, SuggestionStatus } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -21,30 +22,77 @@ export default function SuggestionReview() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { 
-    articles, 
-    suggestions, 
-    resolveSuggestion,
-    currentUser,
-    collaboratorEdits
-  } = useStore();
 
-  // If no specific article ID is provided, look for the first article with pending suggestions
-  const pendingSugs = suggestions.filter(s => s.status === "pending");
-  const targetArticleId = id || pendingSugs[0]?.articleId || articles[0]?.id;
+  const [article, setArticle] = React.useState<any>(null);
+  const [articleSuggestions, setArticleSuggestions] = React.useState<any[]>([]);
+  const [allArticles, setAllArticles] = React.useState<any[]>([]);
+  const [loading, setLoading] = React.useState(true);
 
-  const article = articles.find(a => a.id === targetArticleId);
-  const articleSuggestions = suggestions.filter(s => s.articleId === targetArticleId && s.status === "pending");
-  const articleCollaboratorEdits = collaboratorEdits.filter(e => e.articleId === targetArticleId);
+  React.useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        // Fetch all magazines for the right sidebar
+        const magsRes = await api.get("/magazines");
+        setAllArticles(magsRes.data.data || []);
 
-  const handleResolve = (sugId: string, status: SuggestionStatus) => {
-    resolveSuggestion(sugId, status, `Moderated by ${currentUser?.name || "Marcus Thorne"}`);
-    toast({
-      title: status === "approved" ? "Suggestion Accepted ✅" : "Suggestion Declined ❌",
-      description: `The recommended change has been successfully ${status} and applied.`,
-      variant: status === "approved" ? "success" : "destructive"
-    });
+        if (id) {
+          // Fetch specific edition and suggestions
+          const sugRes = await api.get(`/admin/suggestions/${id}`);
+          if (sugRes.data.data) {
+            setArticle(sugRes.data.data.edition);
+            setArticleSuggestions(sugRes.data.data.suggestions || []);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch suggestion data:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, [id]);
+
+  const handleResolve = async (sugId: string, status: "approved" | "rejected") => {
+    try {
+      if (status === "approved") {
+        await api.post(`/admin/merge/${id}`, { suggestionIds: [sugId] });
+      } else {
+        await api.post(`/admin/reject/${id}`, { suggestionIds: [sugId] });
+      }
+      
+      // Remove resolved suggestion from local state
+      setArticleSuggestions(prev => prev.filter(s => s.id !== sugId));
+
+      toast({
+        title: status === "approved" ? "Suggestion Accepted ✅" : "Suggestion Declined ❌",
+        description: `The recommended change has been successfully ${status} and applied.`,
+        variant: status === "approved" ? "success" : "destructive"
+      });
+    } catch (err: any) {
+      toast({
+        title: "Action Failed",
+        description: err.response?.data?.error || "Could not resolve suggestion",
+        variant: "destructive"
+      });
+    }
   };
+
+  const computeOriginalText = (htmlContent: string, range: any) => {
+    // A simplified extraction from the full HTML content.
+    // In a real robust implementation, we'd parse the HTML and slice by character offsets.
+    if (!htmlContent || !range) return "Unable to extract original text.";
+    const plainText = htmlContent.replace(/<[^>]*>?/gm, '');
+    return plainText.substring(range.start, range.end) || "Unable to extract original text.";
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6 bg-background">
+        <Loader2 className="h-10 w-10 text-primary animate-spin" />
+      </div>
+    );
+  }
 
   if (!article) {
     return (
@@ -107,11 +155,12 @@ export default function SuggestionReview() {
                     {/* Visual metadata header */}
                     <div className="flex items-center justify-between border-b border-border/40 pb-3 select-none">
                       <div className="flex items-center gap-2">
-                        <img src="https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=80" className="h-6 w-6 rounded-full object-cover" alt="" />
-                        <span className="font-bold text-xs">{sug.authorName}</span>
-                        <Badge variant="purple" className="text-[9px] uppercase">{sug.category}</Badge>
+                        <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary">
+                          {(sug.contributor || 'U').charAt(0).toUpperCase()}
+                        </div>
+                        <span className="font-bold text-xs">{sug.contributor}</span>
                       </div>
-                      <span className="text-[10px] text-muted-foreground">{sug.timestamp}</span>
+                      <span className="text-[10px] text-muted-foreground">{new Date(sug.createdAt).toLocaleString()}</span>
                     </div>
 
                     {/* Comparatives side by side diff cards */}
@@ -119,9 +168,9 @@ export default function SuggestionReview() {
                       
                       {/* Left: Original red block */}
                       <div className="p-4 bg-rose-500/5 border border-rose-500/20 rounded-lg space-y-2">
-                        <span className="block text-[10px] uppercase font-bold text-rose-600 select-none">Original text</span>
+                        <span className="block text-[10px] uppercase font-bold text-rose-600 select-none">Original text target</span>
                         <p className="line-through text-muted-foreground leading-relaxed italic">
-                          "{sug.originalText}"
+                          "{computeOriginalText(article.content, sug.range)}"
                         </p>
                       </div>
 
@@ -129,7 +178,7 @@ export default function SuggestionReview() {
                       <div className="p-4 bg-emerald-500/5 border border-emerald-500/20 rounded-lg space-y-2">
                         <span className="block text-[10px] uppercase font-bold text-emerald-600 select-none">Suggested replacement</span>
                         <p className="font-semibold text-foreground leading-relaxed">
-                          "{sug.suggestedText}"
+                          "{sug.suggestion}"
                         </p>
                       </div>
 
@@ -138,7 +187,7 @@ export default function SuggestionReview() {
                     {/* Editorial note description */}
                     <div className="p-3 bg-accent/40 rounded-lg text-xs italic text-muted-foreground border border-border/30">
                       <span className="block font-bold text-[10px] text-foreground uppercase tracking-wider mb-1 select-none">Explanation Note</span>
-                      "{sug.comment}"
+                      "Please review and merge if appropriate."
                     </div>
 
                     {/* Actions button port */}
@@ -169,72 +218,7 @@ export default function SuggestionReview() {
             )}
           </Card>
 
-          {/* ARTICLE COLLABORATIVE EDIT HISTORY */}
-          <Card className="p-6 relative select-none">
-            <div className="border-b border-border/50 pb-4 mb-6 flex items-center justify-between">
-              <div className="flex flex-col">
-                <span className="text-[10px] font-extrabold uppercase text-muted-foreground">Collaborator Activities</span>
-                <span className="font-sora font-extrabold text-base text-foreground">Edit History & Revisions</span>
-              </div>
-              <Badge variant="outline" className="text-[10px] font-bold">
-                {articleCollaboratorEdits.length} Revisions
-              </Badge>
-            </div>
-
-            {articleCollaboratorEdits.length === 0 ? (
-              <p className="text-xs text-muted-foreground text-center py-6">
-                No collaborator revisions recorded for this magazine issue yet.
-              </p>
-            ) : (
-              <div className="space-y-4">
-                {articleCollaboratorEdits.map((edit) => (
-                  <div key={edit.id} className="p-4 rounded-xl border border-border/60 bg-accent/5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="flex items-start gap-3 text-left">
-                      <img src={edit.collaboratorAvatar} className="h-8 w-8 rounded-full border border-border/40 object-cover mt-0.5" />
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-foreground">{edit.collaboratorName}</span>
-                          <span className="text-[9px] text-muted-foreground">• {edit.timestamp}</span>
-                        </div>
-                        <p className="text-xs font-semibold text-muted-foreground">
-                          "{edit.changeSummary}"
-                        </p>
-                        {edit.feedback && (
-                          <p className="text-[10px] text-destructive font-semibold">
-                            Feedback: {edit.feedback}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3 shrink-0 self-start md:self-auto select-none">
-                      <Badge 
-                        variant={
-                          edit.status === "merged" ? "success" : 
-                          edit.status === "rejected" ? "danger" : 
-                          edit.status === "pending_admin_review" ? "warning" : "default"
-                        }
-                        className="capitalize text-[9px] font-bold"
-                      >
-                        {edit.status === "pending_admin_review" ? "Pending Admin Approval" : edit.status}
-                      </Badge>
-
-                      {(edit.status === "pending_admin_review" || edit.status === "draft") && (
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          className="h-7 px-2.5 rounded-lg text-[10px] font-extrabold gap-1 border-primary/20 text-primary hover:bg-primary/5 cursor-pointer"
-                          onClick={() => navigate(`/app/editor-tool/${edit.articleId}?reviewEditId=${edit.id}`)}
-                        >
-                          <span>Inspect Draft</span>
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
+          {/* Removed Mock Collaboration History Block */}
         </div>
 
         {/* RIGHT COLUMN: SELECT OTHER STORIES */}
@@ -246,14 +230,13 @@ export default function SuggestionReview() {
             </div>
 
             <div className="space-y-3">
-              {articles.map((art) => {
-                const sugsCount = suggestions.filter(s => s.articleId === art.id && s.status === "pending").length;
+              {allArticles.map((art) => {
                 return (
                   <div 
                     key={art.id} 
-                    onClick={() => navigate(`/app/suggestion-review/${art.id}`)}
+                    onClick={() => navigate(`/app/admin/suggestions/${art.id}`)}
                     className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between group ${
-                      art.id === targetArticleId 
+                      art.id === id 
                         ? "bg-primary/5 border-primary/30" 
                         : "border-border bg-background hover:bg-accent"
                     }`}
@@ -264,11 +247,6 @@ export default function SuggestionReview() {
                       </span>
                       <span className="text-[10px] text-muted-foreground mt-0.5 capitalize">{art.status} status</span>
                     </div>
-                    {sugsCount > 0 && (
-                      <Badge variant="purple" className="shrink-0 font-extrabold text-[10px] ml-2">
-                        {sugsCount}
-                      </Badge>
-                    )}
                   </div>
                 );
               })}

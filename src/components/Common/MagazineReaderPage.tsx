@@ -94,7 +94,7 @@ export default function MagazineReaderPage() {
     );
   }
 
-  const handleLike = () => {
+  const handleLike = async () => {
     if (hasLiked) {
       setLikes(prev => prev - 1);
       setHasLiked(false);
@@ -107,7 +107,11 @@ export default function MagazineReaderPage() {
         variant: "success"
       });
       // Synchronize in mock database store
-      updateArticle(article.id, { likes: article.likes + 1 });
+      try {
+        await updateArticle(article.id, { likes: article.likes + 1 });
+      } catch (err) {
+        console.error("Like failed", err);
+      }
     }
   };
 
@@ -169,7 +173,7 @@ export default function MagazineReaderPage() {
     setSuggestionOpen(true);
   };
 
-  const handleSuggestionSubmit = (e: React.FormEvent) => {
+  const handleSuggestionSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!suggestedText.trim() || !suggestionComment.trim()) {
       toast({
@@ -180,24 +184,28 @@ export default function MagazineReaderPage() {
       return;
     }
 
-    addSuggestion(
-      article.id,
-      selectedText,
-      suggestedText,
-      suggestionComment,
-      suggestionCategory
-    );
+    try {
+      await addSuggestion(
+        article.id,
+        selectedText,
+        suggestedText,
+        suggestionComment,
+        suggestionCategory
+      );
 
-    setSuggestionOpen(false);
-    setSuggestionComment("");
-    setSuggestedText("");
-    setSelectedText("");
+      setSuggestionOpen(false);
+      setSuggestionComment("");
+      setSuggestedText("");
+      setSelectedText("");
 
-    toast({
-      title: "Suggestion Submitted",
-      description: "Your edit recommendation has been saved to the review queue.",
-      variant: "success"
-    });
+      toast({
+        title: "Suggestion Submitted",
+        description: "Your edit recommendation has been saved to the review queue.",
+        variant: "success"
+      });
+    } catch (err) {
+      toast({ title: "Failed", description: "Failed to submit suggestion.", variant: "destructive" });
+    }
   };
 
   // Render a mock editorial paragraph list, allowing the reader to double-click anywhere to edit

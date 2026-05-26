@@ -420,7 +420,7 @@ export default function UserEditor() {
     });
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!title.trim()) {
       toast({
         title: "Validation Failure",
@@ -432,28 +432,31 @@ export default function UserEditor() {
 
     const serializedHtml = serializeHTML(blocks, theme, padding);
 
-    if (existingArt) {
-      updateArticle(existingArt.id, {
-        title,
-        subtitle,
-        category,
-        coverImage,
-        content: serializedHtml
-      });
-      
-      toast({
-        title: "Workspace Saved ✅",
-        description: `Successfully stored and committed design of "${title}".`,
-        variant: "success"
-      });
-    } else {
-      const fresh = createArticle(title, subtitle, category, coverImage, serializedHtml);
-      toast({
-        title: "Workspace Launched 🚀",
-        description: `Successfully initialized "${title}" in local database.`,
-        variant: "success"
-      });
-      navigate(`/app/editor-tool/${fresh.id}`);
+    try {
+      if (existingArt) {
+        await updateArticle(existingArt.id, {
+          title,
+          subtitle,
+          category,
+          coverImage,
+          content: serializedHtml
+        });
+        toast({
+          title: "Workspace Saved ✅",
+          description: `Successfully stored and committed design of "${title}".`,
+          variant: "success"
+        });
+      } else {
+        const fresh = await createArticle(title, subtitle, category, coverImage, serializedHtml);
+        toast({
+          title: "Workspace Launched 🚀",
+          description: `Successfully initialized "${title}" in local database.`,
+          variant: "success"
+        });
+        navigate(`/app/editor-tool/${fresh.id}`);
+      }
+    } catch (err) {
+      toast({ title: "Save Failed", description: "Could not save the article.", variant: "destructive" });
     }
   };
 

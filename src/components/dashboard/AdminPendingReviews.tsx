@@ -1,16 +1,30 @@
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
-import { useStore } from "@/lib/store";
+import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ShieldAlert } from "lucide-react";
+import { ShieldAlert, Loader2 } from "lucide-react";
 
 export default function AdminPendingReviews() {
-  const { articles } = useStore();
   const navigate = useNavigate();
+  const [pendingArticles, setPendingArticles] = React.useState<any[]>([]);
+  const [loading, setLoading] = React.useState(true);
 
-  const pendingArticles = articles.filter(a => a.status === "pending_review");
+  React.useEffect(() => {
+    const fetchPending = async () => {
+      try {
+        setLoading(true);
+        const res = await api.get("/admin/pending");
+        setPendingArticles(res.data.data || []);
+      } catch (err) {
+        console.error("Failed to fetch pending reviews:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchPending();
+  }, []);
 
   return (
     <div className="space-y-8 pt-6">
@@ -31,7 +45,11 @@ export default function AdminPendingReviews() {
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0 overflow-x-auto">
-          {pendingArticles.length === 0 ? (
+          {loading ? (
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : pendingArticles.length === 0 ? (
             <div className="text-center py-16 space-y-4">
               <ShieldAlert className="h-12 w-12 text-muted-foreground/30 mx-auto" />
               <p className="text-sm text-muted-foreground font-semibold">
@@ -54,17 +72,19 @@ export default function AdminPendingReviews() {
                     <td className="p-4">
                       <div className="flex flex-col">
                         <span className="font-bold text-foreground">{art.title}</span>
-                        <span className="text-[10px] text-muted-foreground mt-0.5">Submitted {art.createdAt}</span>
+                        <span className="text-[10px] text-muted-foreground mt-0.5">Submitted {new Date(art.updatedAt).toLocaleDateString()}</span>
                       </div>
                     </td>
                     <td className="p-4 select-none">
                       <div className="flex items-center gap-2">
-                        <img src={art.authorAvatar} className="h-6 w-6 rounded-full object-cover" />
-                        <span className="font-semibold text-xs">{art.authorName}</span>
+                        <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary">
+                          {(art.authorName || 'U').charAt(0).toUpperCase()}
+                        </div>
+                        <span className="font-semibold text-xs">{art.authorName || 'Unknown'}</span>
                       </div>
                     </td>
                     <td className="p-4 select-none">
-                      <Badge variant="outline" className="text-[10px] font-bold">{art.category}</Badge>
+                      <Badge variant="outline" className="text-[10px] font-bold">{art.category || 'Magazine'}</Badge>
                     </td>
                     <td className="p-4 text-right select-none">
                       <Button 

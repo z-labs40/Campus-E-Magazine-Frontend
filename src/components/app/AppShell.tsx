@@ -83,22 +83,16 @@ export function AppShell() {
     }
   ];
 
-  // Auto switch dashboard depending on role to preview cleanly
-  const handleRoleChange = (role: Role) => {
-    const defaultEmails: Record<string, string> = {
-      admin: "evelyn.vance@campus.edu",
-      "co-admin": "marcus.t@campus.edu",
-      user: "aria.chen@campus.edu",
-    };
-    login(defaultEmails[role] || defaultEmails.user, role);
-    
-    if (isAdminRole(role)) navigate("/app/admin");
-    else navigate("/app");
-  };
-
   React.useEffect(() => {
     setMobileOpen(false);
   }, [location.pathname]);
+
+  // Auth guard — redirect to login if no active session
+  React.useEffect(() => {
+    if (!currentUser) {
+      navigate(`/login?redirect=${encodeURIComponent(location.pathname)}`);
+    }
+  }, [currentUser, navigate, location.pathname]);
 
   const activeUser = currentUser || {
     name: "Guest Writer",
@@ -185,52 +179,16 @@ export function AppShell() {
           </div> */}
         </nav>
 
-        {/* Desktop Sidebar Footer */}
+        {/* Desktop Sidebar Footer — User Info + Logout */}
         <div className="p-4 border-t border-sidebar-border bg-sidebar-accent/50 flex flex-col gap-3">
-          
-          {/* Quick Switch Role Selector */}
-          <div className="flex flex-col gap-1">
-            <span className="text-[10px] text-sidebar-foreground/50 font-semibold uppercase tracking-wider px-1">Testing Role Controller</span>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="glass" className="w-full justify-between h-9 px-3 border-sidebar-border text-white hover:bg-sidebar-accent">
-                  <span className="capitalize font-semibold text-xs flex items-center gap-1.5">
-                    <span className={`h-2 w-2 rounded-full ${
-                      isAdminRole(activeUser.role) ? 'bg-rose-400' : 'bg-emerald-400'
-                    }`} />
-                    {roleDisplayName(effectiveRole)} Preview
-                  </span>
-                  <ChevronDown className="h-3.5 w-3.5 opacity-50" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56" align="end">
-                <DropdownMenuLabel>Switch User View</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => handleRoleChange("user")}>
-                  <div className="flex flex-col text-left">
-                    <span className="font-semibold text-xs">Aria Chen (User)</span>
-                    <span className="text-[10px] text-muted-foreground">Submit drafts, suggest text edits</span>
-                  </div>
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleRoleChange("admin")}>
-                  <div className="flex flex-col text-left">
-                    <span className="font-semibold text-xs">Dr. Evelyn Vance (Admin)</span>
-                    <span className="text-[10px] text-muted-foreground">Global settings, publish issues</span>
-                  </div>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-
           <div className="flex items-center justify-between gap-2 px-1">
             <div className="flex items-center gap-2 select-none">
               <img src={activeUser.avatar} className="h-8.5 w-8.5 rounded-full object-cover border border-sidebar-border" alt="User avatar" />
               <div className="flex flex-col max-w-[120px] overflow-hidden">
                 <span className="font-medium text-xs text-white truncate">{activeUser.name}</span>
-                <span className="text-[10px] text-sidebar-foreground/60 truncate">{activeUser.email}</span>
+                <span className="text-[10px] text-sidebar-foreground/60 truncate">{roleDisplayName(effectiveRole)}</span>
               </div>
             </div>
-            
             <Button variant="ghost" size="icon" onClick={() => { logout(); navigate("/login"); }} className="h-8 w-8 hover:bg-sidebar-accent text-sidebar-foreground/60 hover:text-white rounded-lg">
               <LogOut className="h-4 w-4" />
             </Button>
@@ -281,27 +239,12 @@ export function AppShell() {
               </nav>
 
               <div className="p-4 border-t border-sidebar-border bg-sidebar-accent/50 flex flex-col gap-3">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="glass" className="w-full justify-between h-9 border-sidebar-border text-white">
-                      <span className="capitalize font-semibold text-xs flex items-center gap-1.5">
-                        Role: {activeUser.role}
-                      </span>
-                      <ChevronDown className="h-3.5 w-3.5" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent className="w-56" align="center">
-                    <DropdownMenuItem onClick={() => handleRoleChange("user")}>Aria (User)</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleRoleChange("admin")}>Evelyn (Admin)</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <img src={activeUser.avatar} className="h-8 w-8 rounded-full object-cover border border-sidebar-border" alt="" />
                     <div className="flex flex-col text-left">
                       <span className="font-semibold text-xs text-white">{activeUser.name}</span>
-                      <span className="text-[10px] text-sidebar-foreground/60">{activeUser.role} view</span>
+                      <span className="text-[10px] text-sidebar-foreground/60">{roleDisplayName(effectiveRole)}</span>
                     </div>
                   </div>
                   <Button variant="ghost" size="icon" onClick={() => { logout(); navigate("/login"); }} className="hover:bg-sidebar-accent text-sidebar-foreground/60 hover:text-white">

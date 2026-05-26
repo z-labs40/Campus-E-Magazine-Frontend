@@ -14,10 +14,9 @@ export default function RegisterPage() {
   const [name, setName] = React.useState("");
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
-  const [role, setRole] = React.useState<Role>("user");
   const [loading, setLoading] = React.useState(false);
 
-  const handleRegister = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !email || !password) {
       toast({
@@ -29,10 +28,8 @@ export default function RegisterPage() {
     }
 
     setLoading(true);
-    setTimeout(() => {
-      const user = register(name, email, "user");
-      setLoading(false);
-      
+    try {
+      const user = await register(name, email, password, "user");
       if (user) {
         toast({
           title: "Account Registered",
@@ -40,14 +37,16 @@ export default function RegisterPage() {
           variant: "success"
         });
         navigate("/app");
-      } else {
-        toast({
-          title: "Registration Failed",
-          description: "This email address is already registered.",
-          variant: "destructive"
-        });
       }
-    }, 800);
+    } catch (error: any) {
+      toast({
+        title: "Registration Failed",
+        description: error.response?.data?.message || error.message || "Email address may already be registered.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -125,13 +124,9 @@ export default function RegisterPage() {
               />
             </div>
 
-            <div className="space-y-1.5">
-              <span className="text-xs font-semibold text-muted-foreground">Select Workspace Role</span>
-              <p className="text-xs text-muted-foreground rounded-lg border border-border/50 bg-accent/20 p-3">
-                New accounts start as <strong>Editors</strong> — you can create magazines and submit changes for admin approval.
-                Admins are provisioned only from the admin panel.
-              </p>
-            </div>
+            <p className="text-[11px] text-muted-foreground rounded-lg border border-border/40 bg-accent/20 p-3 leading-relaxed">
+              🎓 New accounts start as <strong>Readers</strong>. Once you submit your first edit suggestion, your account is automatically promoted to <strong>Editor</strong> access.
+            </p>
 
             <Button type="submit" className="w-full rounded-xl gap-2 font-semibold h-11 shadow-premium pt-1 animate-pulse-slow" disabled={loading}>
               <span>{loading ? "Registering..." : "Create Account"}</span>

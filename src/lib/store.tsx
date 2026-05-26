@@ -1,5 +1,7 @@
 import * as React from "react";
 import { getEffectiveRole, isAdminRole, type AccountRole, type EffectiveRole } from "@/lib/roles";
+import Cookies from "js-cookie";
+import { api } from "@/lib/api";
 
 /** @deprecated Use AccountRole — kept for gradual migration */
 export type Role = AccountRole;
@@ -210,9 +212,9 @@ interface StoreContextValue {
   pendingSubmissions: PendingSubmission[];
   
   // Auth Operations
-  login: (email: string, role: AccountRole) => User | null;
+  login: (email: string, password?: string, role?: AccountRole) => Promise<User | null>;
   logout: () => void;
-  register: (name: string, email: string, role: AccountRole) => User | null;
+  register: (name: string, email: string, password?: string, role?: AccountRole) => Promise<User | null>;
   createAdmin: (name: string, email: string, department: string, asCoAdmin?: boolean) => User | null;
   updateAvatar: (avatarUrl: string) => void;
   updateProfile: (name: string, bio: string, department: string) => void;
@@ -585,8 +587,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return a;
     });
     
-    // Auto-login Aria Chen (Writer) as standard default user
-    const defaultUser = loadData<User | null>(SESSION_KEY, INITIAL_USERS[2]); 
+    // Stored active session
+    const defaultUser = loadData<User | null>(SESSION_KEY, null); 
 
     setUsers(localUsers);
     setArticles(migratedArticles);
@@ -643,53 +645,95 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   // 4. ACTION DISPATCHERS
   // ==========================================
 
-  const login = (email: string, role: AccountRole): User | null => {
-    let u = users.find((x) => x.email.toLowerCase() === email.toLowerCase());
-    if (!u) {
-      // Auto register for easy user switches
-      const parts = email.split("@");
-      const name = parts[0].charAt(0).toUpperCase() + parts[0].slice(1).replace(".", " ");
-      u = {
-        id: "u_" + Math.random().toString(36).slice(2, 9),
-        name,
-        email,
-        role,
+  const login = async (email: string, password?: string, role?: AccountRole): Promise<User | null> => {
+    try {
+      const response = await api.post("/auth/login", { email, password });
+      const { token, user: backendUser } = response.data.data;
+
+      // Save token in cookies
+      Cookies.set("token", token, { expires: 7 });
+
+      // Map backend role to frontend AccountRole
+      const mappedRole: AccountRole =
+        backendUser.role === "admin" ? "admin" :
+        backendUser.role === "co-admin" ? "co-admin" : "user";
+
+      const mappedUser: User = {
+        id: backendUser.id,
+        name: backendUser.name,
+        email: backendUser.email,
+        role: mappedRole,
         avatar: `https://images.unsplash.com/photo-${1500000000000 + Math.floor(Math.random()*900000)}?auto=format&fit=crop&q=80&w=150`,
-        bio: `Professional campus ${role} exploring academic and student culture.`,
+        bio: `Professional campus ${mappedRole} exploring academic and student culture.`,
         department: "General Academics",
         publishedCount: 0,
         activeSuggestionsCount: 0
       };
-      setUsers((s) => [...s, u!]);
-    } else {
-      // Switch active role
-      u = { ...u, role };
-      setUsers((s) => s.map((x) => x.id === u!.id ? u! : x));
+
+      setUsers((prev) => {
+        if (prev.some((u) => u.id === mappedUser.id)) {
+          return prev.map((u) => u.id === mappedUser.id ? { ...u, ...mappedUser } : u);
+        }
+        return [...prev, mappedUser];
+      });
+
+      setCurrentUser(mappedUser);
+      return mappedUser;
+    } catch (error: any) {
+      console.error("Login failed:", error);
+      throw error;
     }
-    setCurrentUser(u);
-    return u;
   };
 
   const logout = () => {
+    Cookies.remove("token");
     setCurrentUser(null);
   };
 
-  const register = (name: string, email: string, role: AccountRole): User | null => {
-    if (users.some((x) => x.email.toLowerCase() === email.toLowerCase())) return null;
-    const u: User = {
-      id: "u_" + Math.random().toString(36).slice(2, 9),
-      name,
-      email,
-      role,
-      avatar: `https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150`,
-      bio: `Freshly signed up campus ${role}.`,
-      department: "Undeclared",
-      publishedCount: 0,
-      activeSuggestionsCount: 0
-    };
-    setUsers((s) => [...s, u]);
-    setCurrentUser(u);
-    return u;
+  const register = async (name: string, email: string, password?: string, role?: AccountRole): Promise<User | null> => {
+    try {
+      // All new registrations default to reader on the backend
+      const backendRole = "reader";
+
+      const response = await api.post("/auth/register", {
+        name,
+        email,
+        password,
+        role: backendRole,
+      });
+
+      const { token, user: backendUser } = response.data.data;
+
+      // Save token in cookies
+      Cookies.set("token", token, { expires: 7 });
+
+      const mappedRole: AccountRole = backendUser.role === "admin" ? "admin" : "user";
+
+      const mappedUser: User = {
+        id: backendUser.id,
+        name: backendUser.name,
+        email: backendUser.email,
+        role: mappedRole,
+        avatar: `https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150`,
+        bio: `Freshly signed up campus ${mappedRole}.`,
+        department: "Undeclared",
+        publishedCount: 0,
+        activeSuggestionsCount: 0,
+      };
+
+      setUsers((prev) => {
+        if (prev.some((u) => u.id === mappedUser.id)) {
+          return prev.map((u) => u.id === mappedUser.id ? mappedUser : u);
+        }
+        return [...prev, mappedUser];
+      });
+
+      setCurrentUser(mappedUser);
+      return mappedUser;
+    } catch (error: any) {
+      console.error("Registration failed:", error);
+      throw error;
+    }
   };
 
   const createAdmin = (name: string, email: string, department: string, asCoAdmin = false) => {

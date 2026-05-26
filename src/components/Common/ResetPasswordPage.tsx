@@ -4,6 +4,7 @@ import { Lock, ArrowRight, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { api } from "@/lib/api";
 
 export default function ResetPasswordPage() {
   const navigate = useNavigate();
@@ -14,7 +15,7 @@ export default function ResetPasswordPage() {
   const [confirmPassword, setConfirmPassword] = React.useState("");
   const [loading, setLoading] = React.useState(false);
 
-  const handleReset = (e: React.FormEvent) => {
+  const handleReset = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password !== confirmPassword) {
       toast({
@@ -25,16 +26,38 @@ export default function ResetPasswordPage() {
       return;
     }
 
+    const email = (location.state as any)?.email;
+    const code = (location.state as any)?.code;
+    const token = (location.state as any)?.token;
+
+    if (!email || !code || !token) {
+      toast({
+        title: "Session Expired",
+        description: "Please restart the password recovery process.",
+        variant: "destructive"
+      });
+      navigate("/forgot-password");
+      return;
+    }
+
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      await api.post("/auth/reset-password", { email, code, token, newPassword: password });
       toast({
         title: "Password Updated",
         description: "Your new password is set. Please sign in.",
         variant: "success"
       });
       navigate("/login");
-    }, 800);
+    } catch (error: any) {
+      toast({
+        title: "Reset Failed",
+        description: error.response?.data?.message || error.message || "Failed to reset password. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

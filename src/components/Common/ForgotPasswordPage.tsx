@@ -4,6 +4,7 @@ import { BookOpen, ArrowLeft, ArrowRight, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { api } from "@/lib/api";
 
 export default function ForgotPasswordPage() {
   const navigate = useNavigate();
@@ -11,20 +12,29 @@ export default function ForgotPasswordPage() {
   const [email, setEmail] = React.useState("");
   const [loading, setLoading] = React.useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) return;
 
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      const response = await api.post("/auth/forgot-password", { email });
+      const token = response.data.data.token;
       toast({
         title: "OTP Code Sent",
         description: "A 6-digit verification code has been sent to your campus email.",
         variant: "success"
       });
-      navigate("/verify-otp", { state: { email } });
-    }, 800);
+      navigate("/verify-otp", { state: { email, token } });
+    } catch (error: any) {
+      toast({
+        title: "Request Failed",
+        description: error.response?.data?.message || error.message || "Failed to send OTP code. Please check your email.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

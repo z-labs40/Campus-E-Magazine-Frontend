@@ -4,6 +4,7 @@ import { BookOpen, ShieldAlert, ArrowLeft, ArrowRight, KeyRound } from "lucide-r
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { api } from "@/lib/api";
 
 export default function VerifyOtpPage() {
   const navigate = useNavigate();
@@ -11,8 +12,28 @@ export default function VerifyOtpPage() {
   const { toast } = useToast();
   
   const email = (location.state as any)?.email || "your email";
+  const token = (location.state as any)?.token;
   const [code, setCode] = React.useState<string[]>(Array(6).fill(""));
   const [loading, setLoading] = React.useState(false);
+  const [timeLeft, setTimeLeft] = React.useState(180); // 3 minutes
+
+  React.useEffect(() => {
+    if (!token) {
+      navigate("/forgot-password"); // Redirect if no token is present
+    }
+    
+    if (timeLeft <= 0) return;
+    const timer = setInterval(() => {
+      setTimeLeft(prev => prev - 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [timeLeft, token, navigate]);
+
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  };
 
   const handleChange = (idx: number, val: string) => {
     if (isNaN(Number(val))) return;
@@ -34,7 +55,7 @@ export default function VerifyOtpPage() {
     }
   };
 
-  const handleVerify = (e: React.FormEvent) => {
+  const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault();
     const finalCode = code.join("");
     if (finalCode.length < 6) {
@@ -47,15 +68,23 @@ export default function VerifyOtpPage() {
     }
 
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      await api.post("/auth/verify-otp", { email, code: finalCode, token });
       toast({
         title: "Code Verified",
         description: "Credentials authenticated successfully. Please set a new password.",
         variant: "success"
       });
-      navigate("/reset-password", { state: { email } });
-    }, 800);
+      navigate("/reset-password", { state: { email, code: finalCode, token } });
+    } catch (error: any) {
+      toast({
+        title: "Verification Failed",
+        description: error.response?.data?.message || error.message || "Invalid or expired OTP code.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -86,12 +115,19 @@ export default function VerifyOtpPage() {
                 value={digit}
                 onChange={(e) => handleChange(idx, e.target.value)}
                 onKeyDown={(e) => handleKeyDown(idx, e)}
-                className="h-12 w-10 sm:w-12 rounded-lg border border-input text-center text-lg font-bold font-sora bg-background focus:outline-none focus:ring-2 focus:ring-ring transition-all"
+                disabled={timeLeft === 0}
+                className="h-12 w-10 sm:w-12 rounded-lg border border-input text-center text-lg font-bold font-sora bg-background focus:outline-none focus:ring-2 focus:ring-ring transition-all disabled:opacity-50 disabled:bg-muted"
               />
             ))}
           </div>
 
-          <Button type="submit" className="w-full rounded-xl gap-2 font-semibold h-10 shadow-premium pt-1 animate-pulse-slow" disabled={loading}>
+          {timeLeft > 0 ? (
+            <p className="text-xs font-semibold text-primary animate-pulse">Code expires in {formatTime(timeLeft)}</p>
+          ) : (
+            <p className="text-xs font-bold text-destructive">Code expired. Please request a new one.</p>
+          )}
+
+          <Button type="submit" className="w-full rounded-xl gap-2 font-semibold h-10 shadow-premium pt-1 animate-pulse-slow" disabled={loading || timeLeft === 0}>
             <span>{loading ? "Authenticating..." : "Verify & Continue"}</span>
             {!loading && <ArrowRight className="h-4 w-4" />}
           </Button>

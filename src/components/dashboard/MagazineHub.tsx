@@ -7,6 +7,17 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Plus, BookOpen, Clock, FileEdit } from "lucide-react";
 
+/** Strip HTML tags from contentEditable innerHTML and return plain text */
+function stripHtml(html: string): string {
+  if (!html) return "";
+  try {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    return doc.body.textContent?.trim() || "";
+  } catch {
+    return html.replace(/<[^>]*>/g, "").trim();
+  }
+}
+
 export default function MagazineHub() {
   const { articles, currentUser } = useStore();
   const navigate = useNavigate();
@@ -36,12 +47,18 @@ export default function MagazineHub() {
             className="group cursor-pointer hover:border-primary/50 transition-all duration-300 hover:shadow-premium overflow-hidden border-border/50 bg-card/50 backdrop-blur-sm"
             onClick={() => navigate(`/app/editor-tool/${mag.id}`)}
           >
-            <div className="h-40 w-full overflow-hidden relative">
-              <img 
-                src={mag.coverImage || "https://images.unsplash.com/photo-1506784983877-45594efa4cbe?auto=format&fit=crop&q=80&w=1200"} 
-                alt={mag.title} 
-                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-              />
+            <div className="h-40 w-full overflow-hidden relative bg-gradient-to-br from-primary/10 to-purple-500/10">
+              {mag.coverImage ? (
+                <img 
+                  src={mag.coverImage} 
+                  alt={mag.title} 
+                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <BookOpen className="h-10 w-10 text-primary/30" />
+                </div>
+              )}
               <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/20 to-transparent" />
               <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between">
                 <Badge variant="secondary" className="text-[10px] font-bold shadow-sm backdrop-blur-md bg-background/80">
@@ -57,8 +74,8 @@ export default function MagazineHub() {
             </div>
             <CardContent className="p-4 space-y-3">
               <div>
-                <h3 className="font-bold text-foreground font-sora line-clamp-1 group-hover:text-primary transition-colors">{mag.title}</h3>
-                <p className="text-xs text-muted-foreground line-clamp-2 mt-1 leading-relaxed">{mag.subtitle}</p>
+                <h3 className="font-bold text-foreground font-sora line-clamp-1 group-hover:text-primary transition-colors">{stripHtml(mag.title)}</h3>
+                <p className="text-xs text-muted-foreground line-clamp-2 mt-1 leading-relaxed">{stripHtml(mag.subtitle)}</p>
               </div>
               <div className="flex items-center gap-4 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
                 <div className="flex items-center gap-1.5">

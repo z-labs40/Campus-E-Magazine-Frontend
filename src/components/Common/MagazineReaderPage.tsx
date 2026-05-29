@@ -4,15 +4,11 @@ import {
   BookOpen, 
   ArrowLeft, 
   ThumbsUp, 
-  Share2, 
   MessageSquare, 
   Sparkles, 
   PenTool,
-  Bookmark,
   Calendar,
   Clock,
-  ExternalLink,
-  ChevronRight,
   Bold,
   Italic,
   Underline,
@@ -36,10 +32,16 @@ export default function MagazineReaderPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { articles, comments, addComment, addSuggestion, updateArticle, currentUser, recordArticleView, getPublicArticleContent } = useStore();
+  const { articles, comments, addComment, addSuggestion, updateArticle, currentUser, recordArticleView, getPublicArticleContent, fetchArticleById } = useStore();
 
-  const article = articles.find(a => a.id === id) || articles[0];
+  const article = articles.find(a => a.id === id);
   const publicContent = article ? getPublicArticleContent(article) : null;
+
+  const [selectionRange, setSelectionRange] = React.useState<{ start: number; end: number } | null>(null);
+
+  React.useEffect(() => {
+    if (id) fetchArticleById(id);
+  }, [id, fetchArticleById]);
 
   React.useEffect(() => {
     if (id && article?.status === "published") {
@@ -82,6 +84,22 @@ export default function MagazineReaderPage() {
     return () => document.removeEventListener("mousedown", onMouseDown);
   }, []);
 
+  // Comments persisted to localStorage so they survive page refreshes
+  // Use `id` from useParams (always stable) rather than article?.id for hook stability
+  const STORAGE_KEY = `em.comments.${id || ""}`;
+  const [persistedComments, setPersistedComments] = React.useState<{ id: string; authorId: string; authorName: string; authorRole: string; authorAvatar: string; text: string; at: string }[]>(() => {
+    try { return JSON.parse(localStorage.getItem(`em.comments.${id || ""}`) || "[]"); } catch { return []; }
+  });
+
+  // Merge in-memory store comments with persisted localStorage comments (dedup by id)
+  const allArticleComments = React.useMemo(() => {
+    const combined = [...persistedComments];
+    articleComments.forEach(c => {
+      if (!combined.some(p => p.id === c.id)) combined.push(c);
+    });
+    return combined.sort((a, b) => a.at < b.at ? -1 : 1);
+  }, [persistedComments, articleComments]);
+
   if (!article) {
     return (
       <div className="min-h-screen flex items-center justify-center p-6 bg-background">
@@ -115,20 +133,26 @@ export default function MagazineReaderPage() {
     }
   };
 
-  const handleShare = () => {
-    navigator.clipboard.writeText(window.location.href);
-    toast({
-      title: "Link Copied",
-      description: "Article URL copied to your clipboard.",
-      variant: "success"
-    });
-  };
 
   const handleCommentSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!commentText.trim()) return;
 
-    addComment(article.id, commentText);
+    if (!currentUser) {
+      toast({
+        title: "Sign In to Comment",
+        description: "Please sign in to share your thoughts on this article.",
+        variant: "info"
+      });
+      navigate(`/login?redirect=${encodeURIComponent(`/magazine/${article.id}`)}`);
+      return;
+    }
+
+    const newCom = addComment(article.id, commentText);
+    // Persist to localStorage so comments survive refreshes and are visible to admin
+    const updatedList = [...persistedComments, { ...newCom }];
+    setPersistedComments(updatedList);
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedList)); } catch {}
     setCommentText("");
     toast({
       title: "Comment Published",
@@ -146,6 +170,10 @@ export default function MagazineReaderPage() {
       if (text.length > 1 && selection!.rangeCount > 0) {
         const range = selection!.getRangeAt(0);
         const rect = range.getBoundingClientRect();
+        const content = article?.content || "";
+        const start = content.indexOf(text);
+        const end = start >= 0 ? start + text.length : text.length;
+        if (start >= 0) setSelectionRange({ start, end });
         setFloatToolbar({
           x: rect.left + rect.width / 2,
           y: rect.top + window.scrollY,
@@ -190,7 +218,8 @@ export default function MagazineReaderPage() {
         selectedText,
         suggestedText,
         suggestionComment,
-        suggestionCategory
+        suggestionCategory,
+        selectionRange ?? undefined
       );
 
       setSuggestionOpen(false);
@@ -496,13 +525,15 @@ export default function MagazineReaderPage() {
             <span className="text-xs text-muted-foreground font-semibold">• {article.readTime}</span>
           </div>
 
-          <h1 className="font-sora font-extrabold text-3xl sm:text-5xl text-foreground leading-[1.1] tracking-tight">
-            {publicContent?.title || article.title}
-          </h1>
+          <h1 
+            className="font-sora font-extrabold text-3xl sm:text-5xl text-foreground leading-[1.1] tracking-tight"
+            dangerouslySetInnerHTML={{ __html: publicContent?.title || article.title }}
+          />
 
-          <p className="text-muted-foreground text-sm sm:text-lg leading-relaxed">
-            {publicContent?.subtitle || article.subtitle}
-          </p>
+          <p 
+            className="text-muted-foreground text-sm sm:text-lg leading-relaxed"
+            dangerouslySetInnerHTML={{ __html: publicContent?.subtitle || article.subtitle }}
+          />
 
           <div className="pt-6 border-t border-border/60 flex flex-wrap items-center justify-between gap-4 select-none">
             <div className="flex items-center gap-3">
@@ -581,50 +612,40 @@ export default function MagazineReaderPage() {
               <ThumbsUp className={`h-4 w-4 ${hasLiked ? "fill-primary-foreground" : ""}`} />
               <span>{likes} Likes</span>
             </Button>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={handleShare} 
-              className="gap-2 rounded-lg text-xs font-semibold shadow-premium cursor-pointer"
-            >
-              <Share2 className="h-4 w-4" />
-              <span>Share</span>
-            </Button>
           </div>
 
           <div className="flex items-center gap-2 text-xs text-muted-foreground font-semibold">
             <MessageSquare className="h-4 w-4" />
-            <span>{articleComments.length} Thoughts</span>
+            <span>{allArticleComments.length} Thoughts</span>
           </div>
 
         </div>
 
         {/* 5. PUBLIC DISCUSSION FEED */}
         <section className="space-y-6 text-left">
-          <h3 className="font-sora font-extrabold text-lg text-foreground">Thoughts & Discussion ({articleComments.length})</h3>
+          <h3 className="font-sora font-extrabold text-lg text-foreground">Thoughts & Discussion ({allArticleComments.length})</h3>
           
           <form onSubmit={handleCommentSubmit} className="space-y-3">
             <Textarea
-              placeholder="What are your thoughts on this story? Leave an intellectual comment..."
+              placeholder={currentUser ? "What are your thoughts on this story? Leave an intellectual comment..." : "Sign in to share your thoughts on this article..."}
               value={commentText}
               onChange={(e) => setCommentText(e.target.value)}
               className="rounded-xl border-border bg-card p-4 min-h-[100px] text-sm"
-              required
             />
             <div className="flex justify-end select-none">
               <Button type="submit" className="rounded-xl px-5 text-xs font-semibold shadow-premium h-9">
-                Post Thought
+                {currentUser ? "Post Thought" : "Sign In to Comment"}
               </Button>
             </div>
           </form>
 
           <div className="space-y-4 pt-4">
-            {articleComments.length === 0 ? (
+            {allArticleComments.length === 0 ? (
               <p className="text-center text-xs text-muted-foreground py-6 select-none border border-dashed border-border rounded-xl">
                 No comments registered yet. Be the first to start the dialogue!
               </p>
             ) : (
-              articleComments.map((com) => (
+              allArticleComments.map((com) => (
                 <div key={com.id} className="p-4 rounded-xl border border-border bg-card shadow-premium space-y-2">
                   <div className="flex items-center justify-between select-none">
                     <div className="flex items-center gap-2">
@@ -636,7 +657,7 @@ export default function MagazineReaderPage() {
                     </div>
                     <span className="text-[9px] text-muted-foreground">{com.at}</span>
                   </div>
-                  <p className="text-xs text-muted-foreground/90 font-jakarta leading-relaxed pl-1">
+                  <p className="text-xs text-foreground/80 font-jakarta leading-relaxed pl-1">
                     {com.text}
                   </p>
                 </div>

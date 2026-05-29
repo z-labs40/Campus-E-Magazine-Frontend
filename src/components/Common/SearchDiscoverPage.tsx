@@ -129,12 +129,14 @@ export default function SearchDiscoverPage() {
                             <Badge variant="outline" className="text-[10px] py-0">{art.category}</Badge>
                             <span className="text-[10px] text-muted-foreground font-semibold uppercase">{art.createdAt}</span>
                           </div>
-                          <h3 className="font-sora font-extrabold text-lg text-foreground group-hover:text-primary transition-colors leading-snug">
-                            {art.title}
-                          </h3>
-                          <p className="text-muted-foreground text-xs leading-relaxed line-clamp-2">
-                            {art.subtitle}
-                          </p>
+                          <h3 
+                            className="font-sora font-extrabold text-lg text-foreground group-hover:text-primary transition-colors leading-snug"
+                            dangerouslySetInnerHTML={{ __html: art.title }}
+                          />
+                          <p 
+                            className="text-muted-foreground text-xs leading-relaxed line-clamp-2"
+                            dangerouslySetInnerHTML={{ __html: art.subtitle }}
+                          />
                         </div>
                         
                         <div className="flex items-center justify-between select-none">

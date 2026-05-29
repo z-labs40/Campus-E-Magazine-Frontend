@@ -4,34 +4,33 @@ import { BookOpen, FolderArchive, ArrowLeft, Download, Bookmark, Sparkles } from
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { useStore } from "@/lib/store";
 
 export default function MagazineArchivePage() {
   const navigate = useNavigate();
+  const { articles } = useStore();
 
-  // Simulated Archived Volume catalogs
-  const archiveVolumes = [
-    {
-      vol: "Volume 12",
-      season: "Spring 2026",
-      desc: "Features structural reports regarding Artificial Intelligence classroom frameworks and ecological wild growth proposals.",
-      cover: "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&q=80&w=400",
-      totalIssues: 6
-    },
-    {
-      vol: "Volume 11",
-      season: "Fall 2025",
-      desc: "Explores post-pandemic housing layouts, campus infrastructure budgets, and student mental wellness reporting.",
-      cover: "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&q=80&w=400",
-      totalIssues: 8
-    },
-    {
-      vol: "Volume 10",
-      season: "Spring 2025",
-      desc: "Special centennial issue tracing 100 years of campus activism, historic quad arches, and speech rights history.",
-      cover: "https://images.unsplash.com/photo-1530745342582-0795f23ec976?auto=format&fit=crop&q=80&w=400",
-      totalIssues: 5
+  const published = articles.filter((a) => a.status === "published");
+
+  const archiveVolumes = React.useMemo(() => {
+    const byYear = new Map<string, typeof published>();
+    for (const art of published) {
+      const year = art.createdAt?.match(/\d{4}/)?.[0] || "Archive";
+      const key = year;
+      if (!byYear.has(key)) byYear.set(key, []);
+      byYear.get(key)!.push(art);
     }
-  ];
+    return Array.from(byYear.entries())
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([year, issues], idx) => ({
+        vol: `Volume ${byYear.size - idx}`,
+        season: year,
+        desc: `${issues.length} published issue${issues.length === 1 ? "" : "s"} from the campus magazine.`,
+        cover: issues[0]?.coverImage,
+        totalIssues: issues.length,
+        firstId: issues[0]?.id,
+      }));
+  }, [published]);
 
   return (
     <div className="min-h-screen bg-background flex flex-col font-sans">
@@ -67,46 +66,52 @@ export default function MagazineArchivePage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {archiveVolumes.map((vol) => (
-              <Card 
-                key={vol.vol} 
-                className="hover:shadow-hover bg-card/60 transition-all border-border/50 overflow-hidden flex flex-col justify-between group cursor-pointer"
-                onClick={() => navigate("/magazine")}
-              >
-                <div className="space-y-4">
-                  <div className="relative h-48 overflow-hidden select-none">
-                    <img src={vol.cover} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" alt="" />
-                    <div className="absolute inset-0 bg-black/20" />
-                    <Badge variant="purple" className="absolute top-3 left-3">{vol.season}</Badge>
+          {archiveVolumes.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-16">
+              No published archives yet. Check back after the first issue goes live.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              {archiveVolumes.map((vol) => (
+                <Card 
+                  key={vol.vol} 
+                  className="hover:shadow-hover bg-card/60 transition-all border-border/50 overflow-hidden flex flex-col justify-between group cursor-pointer"
+                  onClick={() => navigate(vol.firstId ? `/magazine/${vol.firstId}` : "/magazine")}
+                >
+                  <div className="space-y-4">
+                    <div className="relative h-48 overflow-hidden select-none">
+                      <img src={vol.cover} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" alt="" />
+                      <div className="absolute inset-0 bg-black/20" />
+                      <div className="absolute bottom-3 left-3 flex items-center gap-2">
+                        <FolderArchive className="h-4 w-4 text-white" />
+                        <span className="text-white text-xs font-bold">{vol.vol}</span>
+                      </div>
+                    </div>
+                    <CardContent className="p-4 pt-0 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Badge variant="secondary" className="text-[9px]">{vol.season}</Badge>
+                        <span className="text-[10px] text-muted-foreground font-semibold">{vol.totalIssues} issues</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">{vol.desc}</p>
+                    </CardContent>
                   </div>
-
-                  <div className="px-5 space-y-2 text-left">
-                    <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">{vol.vol}</span>
-                    <h3 className="font-sora font-extrabold text-lg text-foreground leading-snug group-hover:text-primary transition-colors">
-                      {vol.vol} Issue Catalog
-                    </h3>
-                    <p className="text-muted-foreground text-xs leading-relaxed">
-                      {vol.desc}
-                    </p>
+                  <div className="px-4 pb-4 flex gap-2">
+                    <Button variant="ghost" size="sm" className="h-7 text-[10px] gap-1 flex-1">
+                      <Download className="h-3 w-3" /> PDF
+                    </Button>
+                    <Button variant="ghost" size="sm" className="h-7 text-[10px] gap-1 flex-1">
+                      <Bookmark className="h-3 w-3" /> Save
+                    </Button>
+                    <Button variant="ghost" size="sm" className="h-7 text-[10px] gap-1 flex-1">
+                      <Sparkles className="h-3 w-3" /> Read
+                    </Button>
                   </div>
-                </div>
-
-                <div className="p-5 pt-0 mt-6 border-t border-border/10 flex items-center justify-between select-none">
-                  <span className="text-[10px] text-muted-foreground font-bold">{vol.totalIssues} Articles</span>
-                  <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs text-primary hover:bg-primary/5 rounded-lg">
-                    <Download className="h-3.5 w-3.5" />
-                    <span>Download PDF</span>
-                  </Button>
-                </div>
-
-              </Card>
-            ))}
-          </div>
-
+                </Card>
+              ))}
+            </div>
+          )}
         </div>
       </section>
-
     </div>
   );
 }

@@ -44,6 +44,7 @@ import {
   DialogDescription 
 } from "@/components/ui/modal";
 import { api } from "@/lib/api";
+import { uploadImageToCloudinary } from "@/lib/imageUpload";
 
 // Define the structured block type
 interface EditorBlock {
@@ -297,7 +298,7 @@ export default function AdminAuditor() {
       setTitle("The Digital Frontier: A New Era");
       setSubtitle("Exploring high-speed academic innovations across campus.");
       setCategory("Technology");
-      setCoverImage("https://images.unsplash.com/photo-1506784983877-45594efa4cbe?auto=format&fit=crop&q=80&w=1200");
+      setCoverImage("");
       setBlocks([
         { id: "b1", type: "heading", content: "The Journey Begins Here", fontSize: "large" },
         { id: "b2", type: "paragraph", content: "In the spring semester of last year, a quiet revolution took hold across campus. It didn't arrive with banners or protest lines. Instead, it surfaced in the soft blue glow of library screens at 2:00 AM, in the shifting formats of research drafts, and in the hesitant pauses of faculty lectures." },
@@ -362,6 +363,11 @@ export default function AdminAuditor() {
     else if (currentTheme === "gray") themeStyles = "background-color: #f5f6f8; color: #1e293b; font-family: 'Plus Jakarta Sans', sans-serif;";
     else if (currentTheme === "sage") themeStyles = "background-color: #f0f4f1; color: #1e352f; font-family: 'Sora', sans-serif;";
     else if (currentTheme === "blush") themeStyles = "background-color: #fdf6f6; color: #401e1e; font-family: 'Playfair Display', serif;";
+    else if (currentTheme === "ocean") themeStyles = "background-color: #f0f7ff; color: #0c2340; font-family: 'Plus Jakarta Sans', sans-serif;";
+    else if (currentTheme === "lavender") themeStyles = "background-color: #f5f0ff; color: #2d1b69; font-family: 'Playfair Display', serif;";
+    else if (currentTheme === "midnight") themeStyles = "background-color: #0d1117; color: #e6edf3; font-family: 'Plus Jakarta Sans', sans-serif;";
+    else if (currentTheme === "forest") themeStyles = "background-color: #f0f5f1; color: #1a2e1f; font-family: 'Playfair Display', serif;";
+    else if (currentTheme === "sunset") themeStyles = "background-color: #fff7f0; color: #4a1a00; font-family: 'Playfair Display', serif;";
 
     let padStyle = "padding: 32px;";
     if (currentPadding === "narrow") padStyle = "padding: 16px;";
@@ -559,8 +565,8 @@ export default function AdminAuditor() {
     };
 
     if (type === "image") {
-      newBlock.url = "https://images.unsplash.com/photo-1499750310107-5fef28a66643?auto=format&fit=crop&q=80&w=600";
-      newBlock.caption = "Insert an absolute image URL in settings";
+      newBlock.url = "";
+      newBlock.caption = "Click the upload button on this block to add an image";
       newBlock.width = "100%";
       newBlock.float = "none";
     }
@@ -648,36 +654,45 @@ export default function AdminAuditor() {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "image/*";
-    input.onchange = (e) => {
+    input.onchange = async (e) => {
       const target = e.target as HTMLInputElement;
       if (target.files && target.files.length > 0) {
         const file = target.files[0];
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          const base64Url = event.target?.result as string;
+        try {
+          const uploaded = await uploadImageToCloudinary(file, "magazines");
           if (callback) {
-            callback(base64Url, file.name);
-          } else {
-            const newBlock: EditorBlock = {
-              id: `b-${Math.random().toString(36).slice(2, 6)}`,
-              type: "image",
-              content: "",
-              url: base64Url,
-              caption: file.name,
-              width: "100%",
-              float: "none"
-            };
-            const copy = [...blocks];
-            copy.splice(insertIndex + 1, 0, newBlock);
-            setBlocks(copy);
-            toast({
-              title: "Image Uploaded 🚀",
-              description: `Successfully uploaded "${file.name}" from File Explorer.`,
-              variant: "success"
-            });
+            callback(uploaded.url, file.name);
+            return;
           }
-        };
-        reader.readAsDataURL(file);
+
+          const newBlock: EditorBlock = {
+            id: `b-${Math.random().toString(36).slice(2, 6)}`,
+            type: "image",
+            content: "",
+            url: uploaded.url,
+            caption: file.name,
+            width: "100%",
+            float: "none",
+          };
+
+          setBlocks((prev) => {
+            const copy = [...prev];
+            copy.splice(insertIndex + 1, 0, newBlock);
+            return copy;
+          });
+
+          toast({
+            title: "Image Uploaded",
+            description: `Successfully uploaded "${file.name}" to Cloudinary.`,
+            variant: "success",
+          });
+        } catch (err: any) {
+          toast({
+            title: "Upload Failed",
+            description: err?.response?.data?.error || err.message || "Could not upload image.",
+            variant: "destructive",
+          });
+        }
       }
     };
     input.click();
@@ -738,7 +753,7 @@ export default function AdminAuditor() {
     if (isReadOnly) return;
 
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleFilesDropped(e.dataTransfer.files, index);
+      void handleFilesDropped(e.dataTransfer.files, index);
       setDraggedIndex(null);
       setDragOverIndex(null);
       return;
@@ -765,42 +780,44 @@ export default function AdminAuditor() {
     setDragOverIndex(null);
   };
 
-  const handleFilesDropped = (files: FileList, index: number) => {
+  const handleFilesDropped = async (files: FileList, index: number) => {
     const imageFiles = Array.from(files).filter(file => file.type.startsWith("image/"));
     if (imageFiles.length === 0) return;
 
-    let insertedCount = 0;
-    imageFiles.forEach((file, fIdx) => {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const base64Url = event.target?.result as string;
+    try {
+      for (let fIdx = 0; fIdx < imageFiles.length; fIdx++) {
+        const file = imageFiles[fIdx];
+        const uploaded = await uploadImageToCloudinary(file, "magazines");
+
         const newBlock: EditorBlock = {
           id: `b-${Math.random().toString(36).slice(2, 6)}-${Date.now()}`,
           type: "image",
           content: "",
-          url: base64Url,
+          url: uploaded.url,
           caption: file.name,
           width: "100%",
-          float: "none"
+          float: "none",
         };
-        
-        setBlocks(prev => {
+
+        setBlocks((prev) => {
           const copy = [...prev];
           copy.splice(index + 1 + fIdx, 0, newBlock);
           return copy;
         });
+      }
 
-        insertedCount++;
-        if (insertedCount === imageFiles.length) {
-          toast({
-            title: "Images Uploaded 🚀",
-            description: `Successfully uploaded ${imageFiles.length} file(s) via Drag-and-Drop!`,
-            variant: "success"
-          });
-        }
-      };
-      reader.readAsDataURL(file);
-    });
+      toast({
+        title: "Images Uploaded",
+        description: `Successfully uploaded ${imageFiles.length} file(s) via Drag-and-Drop to Cloudinary.`,
+        variant: "success",
+      });
+    } catch (err: any) {
+      toast({
+        title: "Upload Failed",
+        description: err?.response?.data?.error || err.message || "Could not upload images.",
+        variant: "destructive",
+      });
+    }
   };
 
   // Helper block background and text matches
@@ -834,9 +851,9 @@ export default function AdminAuditor() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 shrink-0 self-start">
-          <Button variant="outline" size="sm" className="h-9 gap-1.5 rounded-xl cursor-pointer" onClick={() => navigate("/app")}>
+          <Button variant="outline" size="sm" className="h-9 gap-1.5 rounded-xl cursor-pointer" onClick={() => navigate("/app/magazines")}>
             <ArrowLeft className="h-4 w-4" />
-            <span>Dashboard</span>
+            <span>Back</span>
           </Button>
           
           {existingArt && !reviewEditId && (
@@ -937,7 +954,7 @@ export default function AdminAuditor() {
           <div className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-amber-600 animate-pulse" />
             <span className="text-left leading-normal">
-              <strong>Admin Audit Mode:</strong> You are auditing proposed layout modifications by <strong>{reviewEdit.collaboratorName}</strong> on <em>"{existingArt?.title}"</em>. You can modify their blocks and click <strong>Approve & Merge Edits</strong> to make them public.
+              <strong>Admin Audit Mode:</strong> You are auditing proposed layout modifications by <strong>{reviewEdit.collaboratorName}</strong> on <em dangerouslySetInnerHTML={{ __html: `"${existingArt?.title}"` }} />. You can modify their blocks and click <strong>Approve & Merge Edits</strong> to make them public.
             </span>
           </div>
           <Badge variant="warning">Awaiting Review</Badge>
@@ -949,7 +966,7 @@ export default function AdminAuditor() {
           <div className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-primary animate-pulse" />
             <span className="text-left leading-normal">
-              <strong>Suggest Edit Mode:</strong> You are proposing changes to <strong>{existingArt.authorName}</strong>'s magazine <em>"{existingArt.title}"</em>. You can <strong>modify existing content</strong> or <strong>add brand new blocks</strong>. Nothing goes live until the Admin reviews and approves your submission.
+              <strong>Suggest Edit Mode:</strong> You are proposing changes to <strong>{existingArt.authorName}</strong>'s magazine <em dangerouslySetInnerHTML={{ __html: `"${existingArt.title}"` }} />. You can <strong>modify existing content</strong> or <strong>add brand new blocks</strong>. Nothing goes live until the Admin reviews and approves your submission.
             </span>
           </div>
           <Badge variant="purple">{myDraftEdit ? "Draft Active" : "New Suggestion"}</Badge>
@@ -992,15 +1009,23 @@ export default function AdminAuditor() {
                   type="button" 
                   variant="default"
                   className="w-full h-10 rounded-xl font-extrabold text-xs gap-1.5 shadow-premium bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
-                  onClick={() => {
+                  onClick={async () => {
                     if (existingArt) {
-                      publishArticle(existingArt.id);
-                      toast({
-                        title: "Article Published Successfully! 🎉",
-                        description: `"${existingArt.title}" is now visible to all registered students.`,
-                        variant: "success"
-                      });
-                      navigate("/app");
+                      try {
+                        await publishArticle(existingArt.id);
+                        toast({
+                          title: "Article Published Successfully! 🎉",
+                          description: `"${existingArt.title}" is now visible to all registered students.`,
+                          variant: "success"
+                        });
+                        navigate("/app");
+                      } catch (err: any) {
+                        toast({
+                          title: "Publish Failed",
+                          description: err?.message || "Failed to publish article. Please try again.",
+                          variant: "destructive"
+                        });
+                      }
                     }
                   }}
                 >
@@ -1111,7 +1136,7 @@ export default function AdminAuditor() {
                     <div className="flex gap-2">
                       <Input 
                         type="text" 
-                        placeholder="https://images.unsplash.com/... or uploaded local" 
+                        placeholder="Upload a file or paste a direct image URL" 
                         value={coverImage}
                         onChange={(e) => setCoverImage(e.target.value)}
                         className="h-9 text-xs flex-1"
@@ -1271,7 +1296,7 @@ export default function AdminAuditor() {
               if (!isReadOnly && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
                 e.preventDefault();
                 e.stopPropagation();
-                handleFilesDropped(e.dataTransfer.files, blocks.length - 1);
+                void handleFilesDropped(e.dataTransfer.files, blocks.length - 1);
               }
             }}
             className={`rounded-3xl border border-border shadow-premium transition-all ${themeBg} ${padClass}`}
@@ -1771,7 +1796,7 @@ export default function AdminAuditor() {
                   value={imgUrl}
                   onChange={(e) => setImgUrl(e.target.value)}
                   className="text-xs rounded-xl flex-1"
-                  placeholder="https://images.unsplash.com/... or uploaded local"
+                  placeholder="Upload a file or paste a direct image URL"
                   type="text"
                   required
                 />

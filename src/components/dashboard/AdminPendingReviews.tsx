@@ -16,7 +16,10 @@ export default function AdminPendingReviews() {
       try {
         setLoading(true);
         const res = await api.get("/admin/pending");
-        setPendingArticles(res.data.data || []);
+        const items = (res.data.data || []).filter(
+          (art: { status?: string }) => art.status === "pending_review"
+        );
+        setPendingArticles(items);
       } catch (err) {
         console.error("Failed to fetch pending reviews:", err);
       } finally {
@@ -71,7 +74,7 @@ export default function AdminPendingReviews() {
                   <tr key={art.id} className="hover:bg-accent/10 transition-colors">
                     <td className="p-4">
                       <div className="flex flex-col">
-                        <span className="font-bold text-foreground">{art.title}</span>
+                        <span className="font-bold text-foreground" dangerouslySetInnerHTML={{ __html: art.title }} />
                         <span className="text-[10px] text-muted-foreground mt-0.5">Submitted {new Date(art.updatedAt).toLocaleDateString()}</span>
                       </div>
                     </td>

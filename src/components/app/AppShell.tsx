@@ -64,7 +64,7 @@ export function AppShell() {
       items: [
         { name: "Pending Reviews", path: "/app/admin/pending", icon: CheckSquare, role: ["admin", "co-admin"], badgeCount: pendingSubmissions.length || undefined },
         { name: "Collaborator Revisions", path: "/app/admin/collaborator", icon: FileCheck, role: ["admin", "co-admin"] },
-        { name: "Create Co-Admin", path: "/app/admin/create", icon: User, role: ["admin", "co-admin"] },
+        { name: "Create Co-Admin", path: "/app/admin/create", icon: User, role: ["admin"] },
       ]
     },
     {
@@ -98,7 +98,7 @@ export function AppShell() {
     name: "Guest Writer",
     email: "guest@campus.edu",
     role: "user" as Role,
-    avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150",
+    avatar: "https://ui-avatars.com/api/?name=Guest+Writer&background=6c47ff&color=fff&size=150&bold=true",
   };
 
   const isLinkActive = (path: string) => {

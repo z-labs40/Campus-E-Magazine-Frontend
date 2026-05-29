@@ -134,7 +134,7 @@ export default function SuggestionReview() {
             <div className="border-b border-border/50 pb-4 mb-6 select-none flex items-center justify-between">
               <div className="flex flex-col">
                 <span className="text-[10px] font-extrabold uppercase text-muted-foreground">Active story targeted</span>
-                <span className="font-sora font-extrabold text-base text-foreground">{article.title}</span>
+                <span className="font-sora font-extrabold text-base text-foreground" dangerouslySetInnerHTML={{ __html: article.title }} />
               </div>
               <Badge variant="purple">{articleSuggestions.length} Pending</Badge>
             </div>
@@ -242,9 +242,7 @@ export default function SuggestionReview() {
                     }`}
                   >
                     <div className="flex flex-col min-w-0">
-                      <span className="font-bold text-xs text-foreground truncate group-hover:text-primary transition-colors leading-snug">
-                        {art.title}
-                      </span>
+                      <span className="font-bold text-xs text-foreground truncate group-hover:text-primary transition-colors leading-snug" dangerouslySetInnerHTML={{ __html: art.title }} />
                       <span className="text-[10px] text-muted-foreground mt-0.5 capitalize">{art.status} status</span>
                     </div>
                   </div>

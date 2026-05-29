@@ -2,6 +2,12 @@ import * as React from "react";
 import { getEffectiveRole, isAdminRole, type AccountRole, type EffectiveRole } from "@/lib/roles";
 import Cookies from "js-cookie";
 import { api } from "@/lib/api";
+import {
+  mapBackendUser,
+  mapMagazine,
+  mapNotification,
+  syncPublishedSnapshot,
+} from "@/lib/mappers";
 
 /** @deprecated Use AccountRole — kept for gradual migration */
 export type Role = AccountRole;
@@ -158,16 +164,6 @@ const NOTIFICATIONS_KEY = "em.notifications.v1";
 const COLLABORATOR_EDITS_KEY = "em.collaboratorEdits.v1";
 const SUBMISSIONS_KEY = "em.submissions.v1";
 
-function syncPublishedSnapshot(art: Article): Partial<Article> {
-  return {
-    publishedTitle: art.title,
-    publishedSubtitle: art.subtitle,
-    publishedContent: art.content,
-    publishedCoverImage: art.coverImage,
-    publishedCategory: art.category,
-  };
-}
-
 function getArticleBaseline(art: Article): Pick<
   PendingSubmission,
   "baselineTitle" | "baselineSubtitle" | "baselineContent" | "baselineCoverImage" | "baselineCategory"
@@ -218,7 +214,7 @@ interface StoreContextValue {
   createAdmin: (name: string, email: string, department: string, asCoAdmin?: boolean) => User | null;
   updateAvatar: (avatarUrl: string) => void;
   updateProfile: (name: string, bio: string, department: string) => void;
-  changePassword: (currentPass: string, newPass: string) => { success: boolean; error?: string };
+  changePassword: (currentPass: string, newPass: string) => Promise<{ success: boolean; error?: string }>;
   // New: retrieve notifications for currently logged-in user
   getNotificationsForCurrentUser: () => Notification[];
 
@@ -227,7 +223,10 @@ interface StoreContextValue {
   createArticle: (title: string, subtitle: string, category: string, coverImage: string, content: string) => Promise<any>;
   updateArticle: (id: string, patch: Partial<Article>) => Promise<void>;
   deleteArticle: (id: string) => Promise<void>;
-  submitForReview: (id: string) => void;
+  submitForReview: (id: string) => Promise<void>;
+  refetchArticles: () => Promise<void>;
+  refetchNotifications: () => Promise<void>;
+  fetchArticleById: (id: string) => Promise<Article | null>;
   publishArticle: (id: string) => Promise<void>;
   approveSubmission: (articleId: string) => void;
   rejectSubmission: (articleId: string, reason: string) => Promise<void>;
@@ -236,7 +235,14 @@ interface StoreContextValue {
   getPublicArticleContent: (article: Article) => { title: string; subtitle: string; content: string; coverImage: string; category: string };
 
   // Suggestions Operations
-  addSuggestion: (articleId: string, originalText: string, suggestedText: string, comment: string, category: EditSuggestion["category"]) => Promise<any>;
+  addSuggestion: (
+    articleId: string,
+    originalText: string,
+    suggestedText: string,
+    comment: string,
+    category: EditSuggestion["category"],
+    range?: { start: number; end: number }
+  ) => Promise<any>;
   resolveSuggestion: (id: string, status: SuggestionStatus, feedback?: string) => Promise<void>;
 
   // Comment Operations
@@ -288,7 +294,7 @@ function saveData<T>(key: string, val: T) {
 // ==========================================
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
-  const [currentUser, setCurrentUser] = React.useState<User | null>(null);
+  const [currentUser, setCurrentUser] = React.useState<User | null>(() => loadData<User | null>(SESSION_KEY, null));
   const [users, setUsers] = React.useState<User[]>([]);
   const [articles, setArticles] = React.useState<Article[]>([]);
   const [suggestions, setSuggestions] = React.useState<EditSuggestion[]>([]);
@@ -299,6 +305,47 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [pendingSubmissions, setPendingSubmissions] = React.useState<PendingSubmission[]>([]);
   const [hydrated, setHydrated] = React.useState(false);
 
+  const refetchArticles = React.useCallback(async () => {
+    try {
+      const magRes = await api.get("/magazines");
+      const backendArticles = magRes.data?.data || [];
+      setArticles(
+        backendArticles.map((mag: any) => mapMagazine(mag, currentUser))
+      );
+    } catch (err) {
+      console.error("Failed to fetch magazines:", err);
+    }
+  }, [currentUser]);
+
+  const refetchNotifications = React.useCallback(async () => {
+    if (!Cookies.get("token")) return;
+    try {
+      const notifRes = await api.get("/notifications");
+      setNotifications((notifRes.data?.data || []).map(mapNotification));
+    } catch (err) {
+      console.error("Failed to fetch notifications:", err);
+    }
+  }, []);
+
+  const fetchArticleById = React.useCallback(
+    async (id: string): Promise<Article | null> => {
+      try {
+        const res = await api.get(`/magazines/${id}`);
+        const mapped = mapMagazine(res.data?.data, currentUser);
+        setArticles((prev) => {
+          const exists = prev.some((a) => a.id === id);
+          if (exists) return prev.map((a) => (a.id === id ? { ...a, ...mapped } : a));
+          return [mapped, ...prev];
+        });
+        return mapped;
+      } catch (err) {
+        console.error("Failed to fetch magazine:", err);
+        return null;
+      }
+    },
+    [currentUser]
+  );
+
   // 1. HYDRATION & RECOVERY
   React.useEffect(() => {
     const defaultUser = loadData<User | null>(SESSION_KEY, null);
@@ -308,43 +355,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       try {
         const [magRes, notifRes] = await Promise.all([
           api.get("/magazines"),
-          defaultUser ? api.get("/notifications") : Promise.resolve({ data: { data: [] } })
+          defaultUser && Cookies.get("token")
+            ? api.get("/notifications")
+            : Promise.resolve({ data: { data: [] } }),
         ]);
 
         const backendArticles = magRes.data?.data || [];
-        const mappedArticles = backendArticles.map((mag: any): Article => ({
-          id: mag.id,
-          title: mag.title,
-          subtitle: "",
-          content: mag.content,
-          status: mag.status,
-          authorId: mag.createdById || mag.createdBy?.id || "",
-          authorName: mag.createdBy?.name || "Unknown Author",
-          authorAvatar: `https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=150`,
-          readTime: `${Math.max(2, Math.ceil((mag.content || "").split(" ").length / 200))} min read`,
-          coverImage: mag.coverImage || "https://images.unsplash.com/photo-1506784983877-45594efa4cbe?auto=format&fit=crop&q=80&w=1200",
-          category: "General",
-          views: 0,
-          likes: 0,
-          shares: 0,
-          commentsCount: 0,
-          createdAt: new Date(mag.createdAt).toLocaleDateString(),
-          ...syncPublishedSnapshot({ title: mag.title, subtitle: "", content: mag.content, coverImage: mag.coverImage, category: "General" } as any)
-        }));
-
-        const mappedNotifs = (notifRes.data?.data || []).map((n: any): Notification => ({
-          id: n.id,
-          title: n.type || "Notification",
-          description: n.message,
-          category: "system",
-          read: n.read,
-          timestamp: new Date(n.createdAt).toLocaleString(),
-          recipientId: n.userId,
-          articleId: n.editionId
-        }));
-
-        setArticles(mappedArticles);
-        setNotifications(mappedNotifs);
+        setArticles(backendArticles.map((mag: any) => mapMagazine(mag, defaultUser)));
+        setNotifications((notifRes.data?.data || []).map(mapNotification));
       } catch (err) {
         console.error("Failed to fetch initial data:", err);
       } finally {
@@ -395,25 +413,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       const response = await api.post("/auth/login", { email, password });
       const { token, user: backendUser } = response.data.data;
 
-      // Save token in cookies
       Cookies.set("token", token, { expires: 7 });
 
-      // Map backend role to frontend AccountRole
-      const mappedRole: AccountRole =
-        backendUser.role === "admin" ? "admin" :
-        backendUser.role === "co-admin" ? "co-admin" : "user";
-
-      const mappedUser: User = {
-        id: backendUser.id,
-        name: backendUser.name,
-        email: backendUser.email,
-        role: mappedRole,
-        avatar: `https://images.unsplash.com/photo-${1500000000000 + Math.floor(Math.random()*900000)}?auto=format&fit=crop&q=80&w=150`,
-        bio: `Professional campus ${mappedRole} exploring academic and student culture.`,
-        department: "General Academics",
-        publishedCount: 0,
-        activeSuggestionsCount: 0
-      };
+      const mappedUser = mapBackendUser(backendUser);
 
       setUsers((prev) => {
         if (prev.some((u) => u.id === mappedUser.id)) {
@@ -423,6 +425,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       });
 
       setCurrentUser(mappedUser);
+
+      const [magRes, notifRes] = await Promise.all([
+        api.get("/magazines"),
+        api.get("/notifications"),
+      ]);
+      setArticles((magRes.data?.data || []).map((mag: any) => mapMagazine(mag, mappedUser)));
+      setNotifications((notifRes.data?.data || []).map(mapNotification));
+
       return mappedUser;
     } catch (error: any) {
       console.error("Login failed:", error);
@@ -449,22 +459,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
       const { token, user: backendUser } = response.data.data;
 
-      // Save token in cookies
       Cookies.set("token", token, { expires: 7 });
 
-      const mappedRole: AccountRole = backendUser.role === "admin" ? "admin" : "user";
-
-      const mappedUser: User = {
-        id: backendUser.id,
-        name: backendUser.name,
-        email: backendUser.email,
-        role: mappedRole,
-        avatar: `https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150`,
-        bio: `Freshly signed up campus ${mappedRole}.`,
-        department: "Undeclared",
-        publishedCount: 0,
-        activeSuggestionsCount: 0,
-      };
+      const mappedUser = mapBackendUser(backendUser);
 
       setUsers((prev) => {
         if (prev.some((u) => u.id === mappedUser.id)) {
@@ -474,6 +471,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       });
 
       setCurrentUser(mappedUser);
+
+      const magRes = await api.get("/magazines");
+      setArticles((magRes.data?.data || []).map((mag: any) => mapMagazine(mag, mappedUser)));
+
       return mappedUser;
     } catch (error: any) {
       console.error("Registration failed:", error);
@@ -513,32 +514,53 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setCurrentUser(updated);
     setUsers((s) => s.map((x) => x.id === currentUser.id ? updated : x));
   };
-  const changePassword = (currentPass: string, newPass: string): { success: boolean; error?: string } => {
+  const changePassword = async (
+    currentPass: string,
+    newPass: string
+  ): Promise<{ success: boolean; error?: string }> => {
     if (!currentUser) return { success: false, error: "No user logged in." };
-    const storedUser = users.find(u => u.id === currentUser.id);
-    const actualPassword = storedUser?.password || "password123";
-    
-    if (currentPass !== actualPassword) {
-      return { success: false, error: "Current password does not match." };
+
+    try {
+      await api.patch("/auth/change-password", {
+        currentPassword: currentPass,
+        newPassword: newPass,
+      });
+      return { success: true };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message || "Failed to update password.",
+      };
     }
-    
-    const updated = { ...currentUser, password: newPass };
-    setCurrentUser(updated);
-    setUsers((s) => s.map((x) => x.id === currentUser.id ? updated : x));
-    return { success: true };
   };
 
   const createArticle = async (title: string, subtitle: string, category: string, coverImage: string, contentBody: string): Promise<any> => {
     try {
+      // Auto-promote reader → author before creating a magazine
+      // This hits PATCH /auth/become-author which upgrades the role and returns a fresh JWT
+      try {
+        const promoRes = await api.patch("/auth/become-author");
+        const { token: newToken, user: promotedUser } = promoRes.data.data;
+        if (newToken) {
+          Cookies.set("token", newToken, { expires: 7 });
+        }
+        // Update local user state if role changed
+        if (promotedUser && currentUser) {
+          const updatedUser = { ...currentUser, ...mapBackendUser(promotedUser) };
+          setCurrentUser(updatedUser);
+        }
+      } catch (promoErr) {
+        // If promotion fails (e.g. already an author/admin), continue anyway
+        console.warn("Role promotion skipped or failed:", promoErr);
+      }
+
       const res = await api.post("/magazines", {
         title,
         content: contentBody,
-        category,
         coverImage,
       });
       const data = res.data.data;
-      const magsRes = await api.get("/magazines");
-      setArticles(magsRes.data.data || []);
+      await refetchArticles();
       return data;
     } catch (err) {
       console.error("Failed to create article", err);
@@ -548,8 +570,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const updateArticle = async (id: string, patch: Partial<Article>): Promise<void> => {
     try {
-      await api.patch(`/magazines/${id}`, patch);
-      setArticles((s) => s.map(a => a.id === id ? { ...a, ...patch } : a));
+      const apiBody: Record<string, unknown> = {};
+      if (patch.title !== undefined) apiBody.title = patch.title;
+      if (patch.content !== undefined) apiBody.content = patch.content;
+      if (patch.coverImage !== undefined) apiBody.coverImage = patch.coverImage;
+      if (patch.status === "pending_review") apiBody.status = "pending_review";
+      if (patch.status === "draft") apiBody.status = "draft";
+
+      if (Object.keys(apiBody).length > 0) {
+        await api.patch(`/magazines/${id}`, apiBody);
+      }
+      setArticles((s) => s.map((a) => (a.id === id ? { ...a, ...patch } : a)));
     } catch (err) {
       console.error("Failed to update article", err);
       throw err;
@@ -557,12 +588,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteArticle = async (id: string): Promise<void> => {
-    try {
-      await api.delete(`/magazines/${id}`);
-      setArticles(s => s.filter(a => a.id !== id));
-    } catch (err) {
-      console.error("Failed to delete article", err);
-    }
+    setArticles((s) => s.filter((a) => a.id !== id));
   };
 
   const getPublicArticleContent = (article: Article) => {
@@ -590,14 +616,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     );
   };
 
-  const submitForReview = (id: string) => {
+  const submitForReview = async (id: string) => {
     const art = articles.find((a) => a.id === id);
     if (!art || !currentUser) return;
     if (isAdminRole(currentUser.role)) {
-      publishArticle(id);
+      await publishArticle(id);
       return;
     }
 
+    const submittedAt = new Date().toLocaleString();
     const baseline = getArticleBaseline(art);
     const isNewArticle = !art.publishedContent && art.status === "draft";
 
@@ -606,7 +633,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       articleId: id,
       submittedById: currentUser.id,
       submittedByName: currentUser.name,
-      submittedAt: new Date().toLocaleString(),
+      submittedAt,
       ...baseline,
       proposedTitle: art.title,
       proposedSubtitle: art.subtitle,
@@ -621,20 +648,19 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return [submission, ...filtered];
     });
 
-    updateArticle(id, {
-      status: "pending_review",
-      submittedAt: submission.submittedAt,
-      rejectionReason: undefined,
-    });
-
-    pushNotification({
-      title: "New Magazine Submission",
-      description: `${currentUser.name} submitted ${isNewArticle ? "a new magazine" : "changes to"} "${art.title}" for approval.`,
-      category: "suggestion",
-      recipientRoles: ["admin", "co-admin"],
-      actionLink: `/app/admin/review/${id}`,
-      articleId: id,
-    });
+    try {
+      await api.patch(`/magazines/${id}`, {
+        title: art.title,
+        content: art.content,
+        coverImage: art.coverImage,
+        status: "pending_review",
+      });
+      await refetchArticles();
+      await refetchNotifications();
+    } catch (err) {
+      console.error("Failed to submit for review:", err);
+      throw err;
+    }
 
     pushNotification({
       title: "Submitted for Review",
@@ -649,12 +675,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const publishArticle = async (id: string): Promise<void> => {
     try {
       await api.patch(`/admin/publish/${id}`);
-      const magsRes = await api.get("/magazines");
-      setArticles(magsRes.data.data || []);
-      setPendingSubmissions(s => s.filter(x => x.articleId !== id));
-    } catch (err) {
+      await refetchArticles();
+      await refetchNotifications();
+      setPendingSubmissions((s) => s.filter((x) => x.articleId !== id));
+    } catch (err: any) {
       console.error("Failed to publish article", err);
-      throw err;
+      // Extract the backend error message (e.g. "Edition is already published")
+      const message =
+        err?.response?.data?.error ||
+        err?.response?.data?.message ||
+        err?.message ||
+        "Failed to publish article";
+      throw new Error(message);
     }
   };
 
@@ -704,9 +736,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const rejectSubmission = async (articleId: string, reason: string): Promise<void> => {
     try {
       await api.patch(`/admin/reject-draft/${articleId}`, { reason });
-      const magsRes = await api.get("/magazines");
-      setArticles(magsRes.data.data || []);
-      setPendingSubmissions(s => s.filter(x => x.articleId !== articleId));
+      await refetchArticles();
+      await refetchNotifications();
+      setPendingSubmissions((s) => s.filter((x) => x.articleId !== articleId));
     } catch (err) {
       console.error("Failed to reject submission", err);
       throw err;
@@ -733,13 +765,31 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const addSuggestion = async (articleId: string, originalText: string, suggestedText: string, comment: string, category: EditSuggestion["category"]): Promise<any> => {
+  const addSuggestion = async (
+    articleId: string,
+    originalText: string,
+    suggestedText: string,
+    comment: string,
+    _category: EditSuggestion["category"],
+    range?: { start: number; end: number }
+  ): Promise<any> => {
     try {
-      const res = await api.post(`/suggestions/${articleId}`, {
-        originalText,
-        suggestion: suggestedText,
-        range: { start: 0, end: 0 }
+      const art = articles.find((a) => a.id === articleId);
+      const content = art?.content || "";
+      let start = range?.start ?? content.indexOf(originalText);
+      let end = range?.end ?? (start >= 0 ? start + originalText.length : 0);
+      if (start < 0) {
+        start = 0;
+        end = originalText.length;
+      }
+
+      const res = await api.post("/suggestions/", {
+        editionId: articleId,
+        range: { start, end, selectedText: originalText },
+        suggestion: `${suggestedText}\n\n[Editor note: ${comment}]`,
       });
+      await refetchArticles();
+      await refetchNotifications();
       return res.data.data;
     } catch (err) {
       console.error("Failed to add suggestion", err);
@@ -1005,6 +1055,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     updateArticle,
     deleteArticle,
     submitForReview,
+    refetchArticles,
+    refetchNotifications,
+    fetchArticleById,
     publishArticle,
     approveSubmission,
     rejectSubmission,

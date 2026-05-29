@@ -43,6 +43,7 @@ import {
   DialogTitle, 
   DialogDescription 
 } from "@/components/ui/modal";
+import { uploadImageToCloudinary } from "@/lib/imageUpload";
 
 // Define the structured block type
 interface EditorBlock {
@@ -318,7 +319,7 @@ export default function UserEditor() {
       setTitle("The Digital Frontier: A New Era");
       setSubtitle("Exploring high-speed academic innovations across campus.");
       setCategory("Technology");
-      setCoverImage("https://images.unsplash.com/photo-1506784983877-45594efa4cbe?auto=format&fit=crop&q=80&w=1200");
+      setCoverImage("");
       setBlocks([
         { id: "b1", type: "heading", content: "The Journey Begins Here", fontSize: "large" },
         { id: "b2", type: "paragraph", content: "In the spring semester of last year, a quiet revolution took hold across campus. It didn't arrive with banners or protest lines. Instead, it surfaced in the soft blue glow of library screens at 2:00 AM, in the shifting formats of research drafts, and in the hesitant pauses of faculty lectures." },
@@ -334,9 +335,15 @@ export default function UserEditor() {
   // HTML SERIALIZATION
   // ==========================================
   const serializeHTML = (blocksList: EditorBlock[], currentTheme: string, currentPadding: string): string => {
+    // Determine if the chosen theme has a dark background — used to auto-force white text on blocks
+    const darkThemes = ["charcoal", "midnight"];
+    const isDark = darkThemes.includes(currentTheme);
+
     const innerHtml = blocksList.map(block => {
       const alignStyle = block.align ? `text-align: ${block.align};` : "";
-      const colorStyle = block.color ? `color: ${block.color};` : "";
+      // If the user hasn't set an explicit text color AND the theme is dark, default to white
+      const effectiveColor = block.color || (isDark ? "#f5f5f5" : "");
+      const colorStyle = effectiveColor ? `color: ${effectiveColor};` : "color: inherit;";
       
       let sizeStyle = "";
       if (block.fontSize === "small") sizeStyle = "font-size: 0.875rem;";
@@ -364,13 +371,13 @@ export default function UserEditor() {
           const imgWidth = block.width ? `width: ${block.width};` : "width: 100%;";
           return `<div class="magazine-image-wrap" style="${imgFloat} ${imgWidth} text-align: center;">
             <img src="${block.url || ''}" alt="${block.caption || ''}" style="max-width: 100%; border-radius: 8px;" />
-            ${block.caption ? `<div class="caption" style="font-size: 0.8rem; color: var(--muted-foreground); margin-top: 8px;">${block.caption}</div>` : ""}
+            ${block.caption ? `<div class="caption" style="font-size: 0.8rem; color: ${isDark ? '#adb5bd' : 'var(--muted-foreground)'}; margin-top: 8px;">${block.caption}</div>` : ""}
           </div>`;
         case "columns":
-          const colContentHtml = (block.colContent || []).map(content => `<div class="magazine-column" style="flex: 1; min-width: 200px; padding: 4px;">${content}</div>`).join("");
-          return `<div class="magazine-grid" style="display: flex; flex-wrap: wrap; gap: 24px; margin: 24px 0;">${colContentHtml}</div>`;
+          const colContentHtml = (block.colContent || []).map(content => `<div class="magazine-column" style="flex: 1; min-width: 200px; padding: 4px; color: inherit;">${content}</div>`).join("");
+          return `<div class="magazine-grid" style="display: flex; flex-wrap: wrap; gap: 24px; margin: 24px 0; color: inherit;">${colContentHtml}</div>`;
         case "divider":
-          return `<hr style="border: 0; height: 1px; background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(0,0,0,0.3), rgba(0,0,0,0)); margin: 32px 0;" />`;
+          return `<hr style="border: 0; height: 1px; background-image: linear-gradient(to right, rgba(${isDark ? '255,255,255' : '0,0,0'},0), rgba(${isDark ? '255,255,255' : '0,0,0'},0.3), rgba(${isDark ? '255,255,255' : '0,0,0'},0)); margin: 32px 0;" />`;
         case "paragraph":
         default:
           return `<p ${styleAttr}>${block.content}</p>`;
@@ -383,12 +390,17 @@ export default function UserEditor() {
     else if (currentTheme === "gray") themeStyles = "background-color: #f5f6f8; color: #1e293b; font-family: 'Plus Jakarta Sans', sans-serif;";
     else if (currentTheme === "sage") themeStyles = "background-color: #f0f4f1; color: #1e352f; font-family: 'Sora', sans-serif;";
     else if (currentTheme === "blush") themeStyles = "background-color: #fdf6f6; color: #401e1e; font-family: 'Playfair Display', serif;";
+    else if (currentTheme === "ocean") themeStyles = "background-color: #f0f7ff; color: #0c2340; font-family: 'Plus Jakarta Sans', sans-serif;";
+    else if (currentTheme === "lavender") themeStyles = "background-color: #f5f0ff; color: #2d1b69; font-family: 'Playfair Display', serif;";
+    else if (currentTheme === "midnight") themeStyles = "background-color: #0d1117; color: #e6edf3; font-family: 'Plus Jakarta Sans', sans-serif;";
+    else if (currentTheme === "forest") themeStyles = "background-color: #f0f5f1; color: #1a2e1f; font-family: 'Playfair Display', serif;";
+    else if (currentTheme === "sunset") themeStyles = "background-color: #fff7f0; color: #4a1a00; font-family: 'Playfair Display', serif;";
 
     let padStyle = "padding: 32px;";
     if (currentPadding === "narrow") padStyle = "padding: 16px;";
     else if (currentPadding === "wide") padStyle = "padding: 48px;";
 
-    return `<div class="magazine-article-container theme-${currentTheme}" style="${themeStyles} ${padStyle} border-radius: 16px; border: 1px solid rgba(0,0,0,0.06); min-height: 500px; box-shadow: var(--shadow-premium);">
+    return `<div class="magazine-article-container theme-${currentTheme}" style="${themeStyles} ${padStyle} border-radius: 16px; border: 1px solid rgba(${isDark ? '255,255,255,0.08' : '0,0,0,0.06'}); min-height: 500px; box-shadow: var(--shadow-premium);">
       ${innerHtml}
     </div>`;
   };
@@ -569,8 +581,8 @@ export default function UserEditor() {
     };
 
     if (type === "image") {
-      newBlock.url = "https://images.unsplash.com/photo-1499750310107-5fef28a66643?auto=format&fit=crop&q=80&w=600";
-      newBlock.caption = "Insert an absolute image URL in settings";
+      newBlock.url = "";
+      newBlock.caption = "Click the upload button on this block to add an image";
       newBlock.width = "100%";
       newBlock.float = "none";
     }
@@ -658,36 +670,45 @@ export default function UserEditor() {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "image/*";
-    input.onchange = (e) => {
+    input.onchange = async (e) => {
       const target = e.target as HTMLInputElement;
       if (target.files && target.files.length > 0) {
         const file = target.files[0];
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          const base64Url = event.target?.result as string;
+        try {
+          const uploaded = await uploadImageToCloudinary(file, "magazines");
           if (callback) {
-            callback(base64Url, file.name);
-          } else {
-            const newBlock: EditorBlock = {
-              id: `b-${Math.random().toString(36).slice(2, 6)}`,
-              type: "image",
-              content: "",
-              url: base64Url,
-              caption: file.name,
-              width: "100%",
-              float: "none"
-            };
-            const copy = [...blocks];
-            copy.splice(insertIndex + 1, 0, newBlock);
-            setBlocks(copy);
-            toast({
-              title: "Image Uploaded 🚀",
-              description: `Successfully uploaded "${file.name}" from File Explorer.`,
-              variant: "success"
-            });
+            callback(uploaded.url, file.name);
+            return;
           }
-        };
-        reader.readAsDataURL(file);
+
+          const newBlock: EditorBlock = {
+            id: `b-${Math.random().toString(36).slice(2, 6)}`,
+            type: "image",
+            content: "",
+            url: uploaded.url,
+            caption: file.name,
+            width: "100%",
+            float: "none",
+          };
+
+          setBlocks((prev) => {
+            const copy = [...prev];
+            copy.splice(insertIndex + 1, 0, newBlock);
+            return copy;
+          });
+
+          toast({
+            title: "Image Uploaded",
+            description: `Successfully uploaded "${file.name}" to Cloudinary.`,
+            variant: "success",
+          });
+        } catch (err: any) {
+          toast({
+            title: "Upload Failed",
+            description: err?.response?.data?.error || err.message || "Could not upload image.",
+            variant: "destructive",
+          });
+        }
       }
     };
     input.click();
@@ -748,7 +769,7 @@ export default function UserEditor() {
     if (isReadOnly) return;
 
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleFilesDropped(e.dataTransfer.files, index);
+      void handleFilesDropped(e.dataTransfer.files, index);
       setDraggedIndex(null);
       setDragOverIndex(null);
       return;
@@ -775,42 +796,44 @@ export default function UserEditor() {
     setDragOverIndex(null);
   };
 
-  const handleFilesDropped = (files: FileList, index: number) => {
+  const handleFilesDropped = async (files: FileList, index: number) => {
     const imageFiles = Array.from(files).filter(file => file.type.startsWith("image/"));
     if (imageFiles.length === 0) return;
 
-    let insertedCount = 0;
-    imageFiles.forEach((file, fIdx) => {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const base64Url = event.target?.result as string;
+    try {
+      for (let fIdx = 0; fIdx < imageFiles.length; fIdx++) {
+        const file = imageFiles[fIdx];
+        const uploaded = await uploadImageToCloudinary(file, "magazines");
+
         const newBlock: EditorBlock = {
           id: `b-${Math.random().toString(36).slice(2, 6)}-${Date.now()}`,
           type: "image",
           content: "",
-          url: base64Url,
+          url: uploaded.url,
           caption: file.name,
           width: "100%",
-          float: "none"
+          float: "none",
         };
-        
-        setBlocks(prev => {
+
+        setBlocks((prev) => {
           const copy = [...prev];
           copy.splice(index + 1 + fIdx, 0, newBlock);
           return copy;
         });
+      }
 
-        insertedCount++;
-        if (insertedCount === imageFiles.length) {
-          toast({
-            title: "Images Uploaded 🚀",
-            description: `Successfully uploaded ${imageFiles.length} file(s) via Drag-and-Drop!`,
-            variant: "success"
-          });
-        }
-      };
-      reader.readAsDataURL(file);
-    });
+      toast({
+        title: "Images Uploaded",
+        description: `Successfully uploaded ${imageFiles.length} file(s) via Drag-and-Drop to Cloudinary.`,
+        variant: "success",
+      });
+    } catch (err: any) {
+      toast({
+        title: "Upload Failed",
+        description: err?.response?.data?.error || err.message || "Could not upload images.",
+        variant: "destructive",
+      });
+    }
   };
 
   // Helper block background and text matches
@@ -844,9 +867,9 @@ export default function UserEditor() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 shrink-0 self-start">
-          <Button variant="outline" size="sm" className="h-9 gap-1.5 rounded-xl cursor-pointer" onClick={() => navigate("/app")}>
+          <Button variant="outline" size="sm" className="h-9 gap-1.5 rounded-xl cursor-pointer" onClick={() => navigate("/app/magazines")}>
             <ArrowLeft className="h-4 w-4" />
-            <span>Dashboard</span>
+            <span>Back</span>
           </Button>
           
           {existingArt && !reviewEditId && (
@@ -997,7 +1020,7 @@ export default function UserEditor() {
           <div className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-primary animate-pulse" />
             <span className="text-left leading-normal">
-              <strong>Suggest Edit Mode:</strong> You are proposing changes to <strong>{existingArt.authorName}</strong>'s magazine <em>"{existingArt.title}"</em>. You can <strong>modify existing content</strong> or <strong>add brand new blocks</strong>. Nothing goes live until the Admin reviews and approves your submission.
+              <strong>Suggest Edit Mode:</strong> You are proposing changes to <strong>{existingArt.authorName}</strong>'s magazine <em dangerouslySetInnerHTML={{ __html: `"${existingArt.title}"` }} />. You can <strong>modify existing content</strong> or <strong>add brand new blocks</strong>. Nothing goes live until the Admin reviews and approves your submission.
             </span>
           </div>
           <Badge variant="purple">{myDraftEdit ? "Draft Active" : "New Suggestion"}</Badge>
@@ -1174,7 +1197,7 @@ export default function UserEditor() {
                     <div className="flex gap-2">
                       <Input 
                         type="text" 
-                        placeholder="https://images.unsplash.com/... or uploaded local" 
+                        placeholder="Upload a file or paste a direct image URL" 
                         value={coverImage}
                         onChange={(e) => setCoverImage(e.target.value)}
                         className="h-9 text-xs flex-1"
@@ -1334,7 +1357,7 @@ export default function UserEditor() {
               if (!isReadOnly && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
                 e.preventDefault();
                 e.stopPropagation();
-                handleFilesDropped(e.dataTransfer.files, blocks.length - 1);
+                void handleFilesDropped(e.dataTransfer.files, blocks.length - 1);
               }
             }}
             className={`rounded-3xl border border-border shadow-premium transition-all ${themeBg} ${padClass}`}
@@ -1834,7 +1857,7 @@ export default function UserEditor() {
                   value={imgUrl}
                   onChange={(e) => setImgUrl(e.target.value)}
                   className="text-xs rounded-xl flex-1"
-                  placeholder="https://images.unsplash.com/... or uploaded local"
+                  placeholder="Upload a file or paste a direct image URL"
                   type="text"
                   required
                 />

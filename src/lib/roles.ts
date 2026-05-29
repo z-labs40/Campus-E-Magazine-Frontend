@@ -12,6 +12,11 @@ export function isAdminRole(role: AccountRole | undefined): boolean {
   return role === "admin" || role === "co-admin";
 }
 
+/** Main (super) admin — can manage co-admins and other privileged account actions */
+export function isSuperAdmin(role: AccountRole | undefined): boolean {
+  return role === "admin";
+}
+
 export function getEffectiveRole(
   user: RoleUser | null
 ): EffectiveRole {

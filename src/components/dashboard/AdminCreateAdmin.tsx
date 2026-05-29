@@ -1,5 +1,8 @@
 import * as React from "react";
+import { Navigate } from "react-router-dom";
 import { api } from "@/lib/api";
+import { useStore } from "@/lib/store";
+import { isSuperAdmin } from "@/lib/roles";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
@@ -17,11 +20,12 @@ interface CoAdmin {
 }
 
 export default function AdminCreateAdmin() {
+  const { currentUser } = useStore();
   const { toast } = useToast();
+  const allowed = Boolean(currentUser && isSuperAdmin(currentUser.role));
 
   const [name, setName] = React.useState("");
   const [email, setEmail] = React.useState("");
-  const [password, setPassword] = React.useState("");
   const [loading, setLoading] = React.useState(false);
 
   const [coAdmins, setCoAdmins] = React.useState<CoAdmin[]>([]);
@@ -45,27 +49,30 @@ export default function AdminCreateAdmin() {
   };
 
   React.useEffect(() => {
-    fetchCoAdmins();
-  }, []);
+    if (allowed) fetchCoAdmins();
+  }, [allowed]);
+
+  if (!allowed) {
+    return <Navigate to="/app/admin" replace />;
+  }
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !email.trim() || !password.trim()) {
-      toast({ title: "Missing Fields", description: "All fields are required.", variant: "destructive" });
+    if (!name.trim() || !email.trim()) {
+      toast({ title: "Missing Fields", description: "Full Name and Campus Email are required.", variant: "destructive" });
       return;
     }
 
     setLoading(true);
     try {
-      const res = await api.post("/admin/co-admins", { name, email, password });
+      const res = await api.post("/admin/co-admins", { name, email });
       toast({
         title: "Co-Admin Created",
-        description: `${res.data.data.name} now has full publishing and moderation access.`,
+        description: `${res.data.data.name} now has full publishing and moderation access. Welcome email sent with a temporary password.`,
         variant: "success",
       });
       setName("");
       setEmail("");
-      setPassword("");
       fetchCoAdmins();
     } catch (err: any) {
       toast({
@@ -127,7 +134,7 @@ export default function AdminCreateAdmin() {
       <div className="text-left space-y-1 select-none">
         <span className="text-[10px] uppercase font-bold tracking-widest text-primary">Access Management</span>
         <h1 className="font-sora font-extrabold text-2xl lg:text-3xl text-foreground">Co-Admin Management</h1>
-        <p className="text-muted-foreground text-xs">Create, manage, and control access for co-administrators. Co-Admins have the same permissions as the main Admin.</p>
+        <p className="text-muted-foreground text-xs">Create, manage, and control access for co-administrators. Co-admins can use admin workflows but cannot create other co-admins.</p>
       </div>
 
       {/* Create Co-Admin Form */}
@@ -138,7 +145,7 @@ export default function AdminCreateAdmin() {
             <span>Create New Co-Admin</span>
           </CardTitle>
           <CardDescription>
-            Enter credentials for the new co-administrator. They will be able to log in and access all admin tools immediately.
+            Enter the co-admin details. A welcome email with a temporary password will be sent automatically.
           </CardDescription>
         </CardHeader>
         <CardContent className="p-6">
@@ -152,10 +159,6 @@ export default function AdminCreateAdmin() {
                 <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">Campus Email</label>
                 <Input type="email" placeholder="sarah.jenkins@campus.edu" value={email} onChange={(e) => setEmail(e.target.value)} required className="h-10" />
               </div>
-            </div>
-            <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">Initial Password</label>
-              <Input type="password" placeholder="Create a secure password" value={password} onChange={(e) => setPassword(e.target.value)} required className="h-10" />
             </div>
             <Button type="submit" className="w-full h-10 mt-2 gap-2" variant="default" disabled={loading}>
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}

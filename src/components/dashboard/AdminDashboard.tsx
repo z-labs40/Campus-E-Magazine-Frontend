@@ -1,12 +1,16 @@
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
+import { useStore } from "@/lib/store";
+import { isSuperAdmin } from "@/lib/roles";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Users, BookOpen, Eye, ThumbsUp, MessageSquare, TrendingUp, Loader2 } from "lucide-react";
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
+  const { currentUser } = useStore();
+  const canManageCoAdmins = isSuperAdmin(currentUser?.role);
 
   const [loading, setLoading] = React.useState(true);
   const [stats, setStats] = React.useState({
@@ -23,15 +27,16 @@ export default function AdminDashboard() {
     const fetchDashboardData = async () => {
       try {
         setLoading(true);
-        const [statsRes, magsRes, adminsRes] = await Promise.all([
+        const requests = [
           api.get("/admin/stats"),
           api.get("/magazines"),
-          api.get("/admin/co-admins"),
-        ]);
-        
+          ...(canManageCoAdmins ? [api.get("/admin/co-admins")] : []),
+        ] as const;
+        const [statsRes, magsRes, adminsRes] = await Promise.all(requests);
+
         setStats(statsRes.data.data || {});
         setPublishedArticles(magsRes.data.data || []);
-        setCoAdmins(adminsRes.data.data || []);
+        setCoAdmins(canManageCoAdmins && adminsRes ? adminsRes.data.data || [] : []);
       } catch (err) {
         console.error("Failed to fetch dashboard data:", err);
       } finally {
@@ -39,7 +44,7 @@ export default function AdminDashboard() {
       }
     };
     fetchDashboardData();
-  }, []);
+  }, [canManageCoAdmins]);
 
   // Using defaults for missing stats in backend
   const pendingCount = stats.pendingEditions || 0;
@@ -140,7 +145,7 @@ export default function AdminDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         
         {/* LEFT COLUMN: ANALYTICS TABLE */}
-        <div className="lg:col-span-8 space-y-6 text-left">
+        <div className={`${canManageCoAdmins ? "lg:col-span-8" : "lg:col-span-12"} space-y-6 text-left`}>
           <Card className="border-border/50 shadow-premium">
             <CardHeader className="select-none border-b border-border/10 pb-4">
               <CardTitle className="flex items-center gap-2">
@@ -164,7 +169,7 @@ export default function AdminDashboard() {
                     <tr key={art.id} className="hover:bg-accent/10 transition-colors">
                       <td className="p-4 text-left">
                         <div className="flex flex-col">
-                          <span className="font-bold text-foreground">{art.title}</span>
+                          <span className="font-bold text-foreground" dangerouslySetInnerHTML={{ __html: art.title }} />
                           <span className="text-[10px] text-muted-foreground mt-0.5">Author: {art.authorName || 'Unknown'}</span>
                         </div>
                       </td>
@@ -201,59 +206,60 @@ export default function AdminDashboard() {
           </Card>
         </div>
 
-        {/* RIGHT COLUMN: ACTIVE USERS MANAGER */}
-        <div className="lg:col-span-4 space-y-6 text-left">
-          <Card className="border-border/50 shadow-premium">
-            <CardHeader className="select-none border-b border-border/10 pb-4">
-              <CardTitle className="flex items-center gap-2">
-                <Users className="h-5 w-5 text-primary" />
-                <span>User Roster</span>
-              </CardTitle>
-              <CardDescription>Current registered accounts.</CardDescription>
-            </CardHeader>
-            <CardContent className="p-0 overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border/10 bg-accent/10 select-none text-muted-foreground font-bold">
-                    <th className="p-4 text-left">User</th>
-                    <th className="p-4 text-right">Role</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/10 font-jakarta">
-                  {coAdmins.map((u) => (
-                    <tr key={u.id} className="hover:bg-accent/10 transition-colors">
-                      <td className="p-4">
-                        <div className="flex items-center gap-2.5">
-                          <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
-                            {u.name?.charAt(0).toUpperCase()}
-                          </div>
-                          <div className="flex flex-col">
-                            <span className="font-bold text-foreground text-xs">{u.name}</span>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="p-4 text-right select-none">
-                        <Badge 
-                          variant="danger"
-                          className="capitalize text-[10px] font-bold"
-                        >
-                          Co-Admin
-                        </Badge>
-                      </td>
+        {canManageCoAdmins && (
+          <div className="lg:col-span-4 space-y-6 text-left">
+            <Card className="border-border/50 shadow-premium">
+              <CardHeader className="select-none border-b border-border/10 pb-4">
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="h-5 w-5 text-primary" />
+                  <span>User Roster</span>
+                </CardTitle>
+                <CardDescription>Current registered co-admin accounts.</CardDescription>
+              </CardHeader>
+              <CardContent className="p-0 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border/10 bg-accent/10 select-none text-muted-foreground font-bold">
+                      <th className="p-4 text-left">User</th>
+                      <th className="p-4 text-right">Role</th>
                     </tr>
-                  ))}
-                  {coAdmins.length === 0 && (
-                    <tr>
-                      <td colSpan={2} className="text-center p-8 text-muted-foreground text-xs">
-                        No co-admins found.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </CardContent>
-          </Card>
-        </div>
+                  </thead>
+                  <tbody className="divide-y divide-border/10 font-jakarta">
+                    {coAdmins.map((u) => (
+                      <tr key={u.id} className="hover:bg-accent/10 transition-colors">
+                        <td className="p-4">
+                          <div className="flex items-center gap-2.5">
+                            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
+                              {u.name?.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="font-bold text-foreground text-xs">{u.name}</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="p-4 text-right select-none">
+                          <Badge
+                            variant="danger"
+                            className="capitalize text-[10px] font-bold"
+                          >
+                            Co-Admin
+                          </Badge>
+                        </td>
+                      </tr>
+                    ))}
+                    {coAdmins.length === 0 && (
+                      <tr>
+                        <td colSpan={2} className="text-center p-8 text-muted-foreground text-xs">
+                          No co-admins found.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
+          </div>
+        )}
       </div>
     </div>
   );

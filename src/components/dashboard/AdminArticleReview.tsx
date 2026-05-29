@@ -8,11 +8,13 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import ContentDiffReview from "./ContentDiffReview";
+import { useStore } from "@/lib/store";
 
 export default function AdminArticleReview() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { refetchArticles, refetchNotifications } = useStore();
 
   const [rejectReason, setRejectReason] = React.useState("");
   const [showReject, setShowReject] = React.useState(false);
@@ -63,6 +65,8 @@ export default function AdminArticleReview() {
   const handleApprove = async () => {
     try {
       await api.patch(`/admin/publish/${article.id}`);
+      await refetchArticles();
+      await refetchNotifications();
       toast({
         title: "Approved & Published",
         description: `"${afterTitle}" is now live on the public magazine.`,
@@ -85,6 +89,8 @@ export default function AdminArticleReview() {
     }
     try {
       await api.patch(`/admin/reject-draft/${article.id}`, { reason: rejectReason.trim() });
+      await refetchArticles();
+      await refetchNotifications();
       toast({
         title: "Changes Rejected",
         description: "The author has been notified with your feedback.",

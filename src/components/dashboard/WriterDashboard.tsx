@@ -23,10 +23,9 @@ export default function WriterDashboard() {
   const { toast } = useToast();
   const { articles, currentUser, createArticle, deleteArticle, submitForReview } = useStore();
 
-  const author = currentUser || { id: "u-3", name: "Aria Chen" };
-  
-  // Filter articles belonging to current logged in writer/user
-  const myArticles = articles.filter(a => a.authorId === author.id);
+  if (!currentUser) return null;
+
+  const myArticles = articles.filter((a) => a.authorId === currentUser.id);
 
   // Statistics
   const totalDrafts = myArticles.filter(a => a.status === "draft").length;
@@ -43,7 +42,7 @@ export default function WriterDashboard() {
         "Untitled Workspace Draft", 
         "Click here to write an interesting subtitle...", 
         "Technology", 
-        "https://images.unsplash.com/photo-1506784983877-45594efa4cbe?auto=format&fit=crop&q=80&w=1200",
+        "",
         "<p>Start typing your collegiate masterpiece here...</p>"
       );
       toast({
@@ -57,13 +56,21 @@ export default function WriterDashboard() {
     }
   };
 
-  const handleSubmitReview = (id: string, title: string) => {
-    submitForReview(id);
-    toast({
-      title: "Submitted for Review",
-      description: `"${title}" has been successfully pushed to the Editor moderated queue.`,
-      variant: "success"
-    });
+  const handleSubmitReview = async (id: string, title: string) => {
+    try {
+      await submitForReview(id);
+      toast({
+        title: "Submitted for Review",
+        description: `"${title}" has been successfully pushed to the Editor moderated queue.`,
+        variant: "success",
+      });
+    } catch {
+      toast({
+        title: "Submit Failed",
+        description: "Could not submit this draft for review.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleDelete = (id: string, title: string) => {
@@ -192,7 +199,7 @@ export default function WriterDashboard() {
                           <img src={art.coverImage} className="h-full w-full object-cover" alt="" />
                         </div>
                         <div className="flex flex-col min-w-0">
-                          <span className="font-bold text-foreground truncate">{art.title}</span>
+                          <span className="font-bold text-foreground truncate" dangerouslySetInnerHTML={{ __html: art.title }} />
                           <span className="text-[10px] text-muted-foreground mt-0.5">Created {art.createdAt}</span>
                         </div>
                       </div>

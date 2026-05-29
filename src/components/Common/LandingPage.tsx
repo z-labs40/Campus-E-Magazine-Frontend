@@ -182,7 +182,7 @@ export default function LandingPage() {
                 <div className="space-y-4">
                   <div className="flex items-center gap-2 select-none">
                     <img 
-                      src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=100" 
+                      src="https://ui-avatars.com/api/?name=Marcus+Thorne&background=6c47ff&color=fff&size=100&bold=true" 
                       className="h-8 w-8 rounded-full object-cover border border-border" 
                       alt="" 
                     />
@@ -302,12 +302,14 @@ export default function LandingPage() {
                     <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">
                       {art.createdAt} • {art.likes} 👍 likes
                     </span>
-                    <h3 className="font-sora font-bold text-lg text-foreground group-hover:text-primary transition-colors leading-snug">
-                      {art.title}
-                    </h3>
-                    <p className="text-muted-foreground text-xs line-clamp-2 leading-relaxed">
-                      {art.subtitle}
-                    </p>
+                    <h3 
+                      className="font-sora font-bold text-lg text-foreground group-hover:text-primary transition-colors leading-snug"
+                      dangerouslySetInnerHTML={{ __html: art.title }}
+                    />
+                    <p 
+                      className="text-muted-foreground text-xs line-clamp-2 leading-relaxed animate-none"
+                      dangerouslySetInnerHTML={{ __html: art.subtitle }}
+                    />
                   </div>
                   <div className="flex items-center gap-2 pt-4 select-none">
                     <img src={art.authorAvatar} className="h-6 w-6 rounded-full object-cover border border-border" alt="" />

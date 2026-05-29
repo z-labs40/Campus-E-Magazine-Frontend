@@ -71,7 +71,7 @@ export default function VersionHistory() {
         <div className="flex flex-wrap items-center justify-between gap-4 text-left">
           <div>
             <span className="text-[9px] font-extrabold text-muted-foreground uppercase">currently viewing logs for:</span>
-            <h3 className="font-sora font-extrabold text-base text-foreground leading-snug">{article.title}</h3>
+            <h3 className="font-sora font-extrabold text-base text-foreground leading-snug" dangerouslySetInnerHTML={{ __html: article.title }} />
           </div>
           <Badge variant="success">Active Status: {article.status.toUpperCase()}</Badge>
         </div>

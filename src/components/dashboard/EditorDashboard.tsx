@@ -41,8 +41,8 @@ export default function EditorDashboard() {
         description: `"${title}" has been launched live in the public magazine homepage!`,
         variant: "success"
       });
-    } catch (err) {
-      toast({ title: "Error", description: "Failed to publish article", variant: "destructive" });
+    } catch (err: any) {
+      toast({ title: "Publish Failed", description: err?.message || "Failed to publish article.", variant: "destructive" });
     }
   };
 
@@ -123,7 +123,7 @@ export default function EditorDashboard() {
                     
                     <td className="p-4">
                       <div className="flex flex-col">
-                        <span className="font-bold text-foreground">{art.title}</span>
+                        <span className="font-bold text-foreground" dangerouslySetInnerHTML={{ __html: art.title }} />
                         <span className="text-[10px] text-muted-foreground mt-0.5">Submitted {art.createdAt}</span>
                       </div>
                     </td>

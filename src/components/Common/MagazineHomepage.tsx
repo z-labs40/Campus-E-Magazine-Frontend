@@ -99,13 +99,15 @@ export default function MagazineHomepage() {
                     <span className="text-xs text-muted-foreground font-semibold">• {spotlightArticle.readTime}</span>
                   </div>
 
-                  <h1 className="font-sora font-extrabold text-2xl lg:text-4xl text-foreground tracking-tight leading-tight">
-                    {spotlightArticle.title}
-                  </h1>
+                  <h1 
+                    className="font-sora font-extrabold text-2xl lg:text-4xl text-foreground tracking-tight leading-tight"
+                    dangerouslySetInnerHTML={{ __html: spotlightArticle.title }}
+                  />
 
-                  <p className="text-muted-foreground text-sm lg:text-base leading-relaxed">
-                    {spotlightArticle.subtitle}
-                  </p>
+                  <p 
+                    className="text-muted-foreground text-sm lg:text-base leading-relaxed"
+                    dangerouslySetInnerHTML={{ __html: spotlightArticle.subtitle }}
+                  />
                 </div>
 
                 <div className="pt-8 border-t border-border flex items-center justify-between">
@@ -193,12 +195,14 @@ export default function MagazineHomepage() {
 
                         <div className="px-6 space-y-2">
                           <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">{art.createdAt} • {art.readTime}</span>
-                          <h3 className="font-sora font-bold text-lg text-foreground group-hover:text-primary transition-colors leading-snug">
-                            {art.title}
-                          </h3>
-                          <p className="text-muted-foreground text-xs leading-relaxed line-clamp-2">
-                            {art.subtitle}
-                          </p>
+                          <h3 
+                            className="font-sora font-bold text-lg text-foreground group-hover:text-primary transition-colors leading-snug"
+                            dangerouslySetInnerHTML={{ __html: art.title }}
+                          />
+                          <p 
+                            className="text-muted-foreground text-xs leading-relaxed line-clamp-2"
+                            dangerouslySetInnerHTML={{ __html: art.subtitle }}
+                          />
                         </div>
                       </div>
 
@@ -237,9 +241,10 @@ export default function MagazineHomepage() {
                     >
                       <span className="text-2xl font-sora font-extrabold text-primary/30 group-hover:text-primary transition-colors">0{idx + 1}</span>
                       <div className="space-y-1">
-                        <h4 className="font-semibold text-xs text-foreground group-hover:text-primary transition-colors line-clamp-2 leading-tight">
-                          {art.title}
-                        </h4>
+                        <h4 
+                          className="font-semibold text-xs text-foreground group-hover:text-primary transition-colors line-clamp-2 leading-tight"
+                          dangerouslySetInnerHTML={{ __html: art.title }}
+                        />
                         <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">{art.authorName}</span>
                       </div>
                     </div>

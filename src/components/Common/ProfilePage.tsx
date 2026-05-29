@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { uploadImageToCloudinary } from "@/lib/imageUpload";
 import { 
   Dialog, 
   DialogContent, 
@@ -32,11 +33,29 @@ export default function ProfilePage() {
     fileInputRef.current?.click();
   };
 
-  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const [avatarUploading, setAvatarUploading] = React.useState(false);
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const url = URL.createObjectURL(file);
-    updateAvatar(url);
+    try {
+      setAvatarUploading(true);
+      const uploaded = await uploadImageToCloudinary(file, "avatars");
+      updateAvatar(uploaded.url);
+      toast({
+        title: "Profile image updated",
+        description: "Your image was uploaded successfully.",
+        variant: "success",
+      });
+    } catch (err: any) {
+      toast({
+        title: "Upload Failed",
+        description: err?.response?.data?.error || err.message || "Could not upload image.",
+        variant: "destructive",
+      });
+    } finally {
+      setAvatarUploading(false);
+    }
   };
   const { toast } = useToast();
 
@@ -50,6 +69,7 @@ export default function ProfilePage() {
   const [newPass, setNewPass] = React.useState("");
   const [confirmPass, setConfirmPass] = React.useState("");
   const [showPassword, setShowPassword] = React.useState(false);
+  const [passwordLoading, setPasswordLoading] = React.useState(false);
 
   // Sync state if current user loads late
   React.useEffect(() => {
@@ -64,7 +84,7 @@ export default function ProfilePage() {
     id: "u-3",
     name: "Aria Chen",
     role: "user" as const,
-    avatar: "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=150",
+    avatar: "https://ui-avatars.com/api/?name=Aria+Chen&background=6c47ff&color=fff&size=150&bold=true",
     email: "aria.chen@campus.edu",
     bio: "Computer Science major, tech journalist.",
     department: "Computer Science"
@@ -83,14 +103,23 @@ export default function ProfilePage() {
     });
   };
 
-  const handlePasswordChangeSubmit = (e: React.FormEvent) => {
+  const handlePasswordChangeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
+    if (!currentUser) {
+      toast({
+        title: "Not Signed In",
+        description: "Please log in to change your password.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (!currentPass || !newPass || !confirmPass) {
       toast({
         title: "Validation Error",
         description: "Please fill in all the password fields.",
-        variant: "destructive"
+        variant: "destructive",
       });
       return;
     }
@@ -99,7 +128,7 @@ export default function ProfilePage() {
       toast({
         title: "Mismatch Password",
         description: "New password and Confirm password fields do not match.",
-        variant: "destructive"
+        variant: "destructive",
       });
       return;
     }
@@ -108,29 +137,33 @@ export default function ProfilePage() {
       toast({
         title: "Weak Password",
         description: "New password must be at least 6 characters long.",
-        variant: "destructive"
+        variant: "destructive",
       });
       return;
     }
 
-    const res = changePassword(currentPass, newPass);
-    if (res.success) {
-      toast({
-        title: "Password Updated Successfully ✅",
-        description: "Your security access key was updated successfully.",
-        variant: "success"
-      });
-      // Clear inputs and close
-      setCurrentPass("");
-      setNewPass("");
-      setConfirmPass("");
-      setIsPasswordModalOpen(false);
-    } else {
-      toast({
-        title: "Access Verification Failed",
-        description: res.error || "Incorrect current password.",
-        variant: "destructive"
-      });
+    setPasswordLoading(true);
+    try {
+      const res = await changePassword(currentPass, newPass);
+      if (res.success) {
+        toast({
+          title: "Password Updated",
+          description: "Your password was updated successfully. Use it the next time you sign in.",
+          variant: "success",
+        });
+        setCurrentPass("");
+        setNewPass("");
+        setConfirmPass("");
+        setIsPasswordModalOpen(false);
+      } else {
+        toast({
+          title: "Password Update Failed",
+          description: res.error || "Incorrect current password.",
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setPasswordLoading(false);
     }
   };
 
@@ -329,11 +362,12 @@ export default function ProfilePage() {
               >
                 Cancel
               </Button>
-              <Button 
-                type="submit" 
+              <Button
+                type="submit"
                 className="rounded-xl h-10 text-xs font-bold px-6 shadow-premium"
+                disabled={passwordLoading}
               >
-                Update Password
+                {passwordLoading ? "Updating..." : "Update Password"}
               </Button>
             </div>
           </form>
